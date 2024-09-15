@@ -85,15 +85,19 @@ struct TapeMachineModule : Module
    {
       config(Params::NUM_PARAMS, Inputs::NUM_INPUTS, Outputs::NUM_OUTPUTS, Lights::NUM_LIGHTS);
       configParam(Params::PROBABILITY_PARAM, 0, 1, 0.5, "probability", "%", 0, 100);
+      getParamQuantity(Params::PROBABILITY_PARAM)->description = "probability of a bit being toggled on each clock pulse.";
       configParam(Params::CLEAR_PARAM, 0, 1, 0, "clear");
+      getParamQuantity(Params::CLEAR_PARAM)->description = "clears first bit on each clock pulse while held.";
       configParam(Params::SET_PARAM, 0, 1, 0, "set");
+      getParamQuantity(Params::SET_PARAM)->description = "sets first bit on each clock pulse while held.";
       configParam(Params::SHIFT_PARAM, 1, 15, 1, "shift", " bit(s)");
+      getParamQuantity(Params::SHIFT_PARAM)->description = "how many bits to shift with each clock pulse. (1-15 bits)";
       getParamQuantity(Params::SHIFT_PARAM)->snapEnabled = true;
       configInput(Inputs::CLOCK_INPUT, "clock");
       configInput(Inputs::CLEAR_INPUT, "clear");
-      getInputInfo(Inputs::CLEAR_INPUT)->description = "clears first bit while input gate is high. expects 0-10V.";
+      getInputInfo(Inputs::CLEAR_INPUT)->description = "clears first bit on each clock pulse while input gate is high. expects 0-10V.";
       configInput(Inputs::SET_INPUT, "set");
-      getInputInfo(Inputs::SET_INPUT)->description = "sets first bit while input gate is high. expects 0-10V.";
+      getInputInfo(Inputs::SET_INPUT)->description = "sets first bit on each clock pulse while input gate is high. expects 0-10V.";
       configInput(Inputs::SHIFT_INPUT, "shift");
       getInputInfo(Inputs::SHIFT_INPUT)->description = "how many bits to shift with each clock pulse. expects 0-10V (1-15 bits).";
       configOutput(Outputs::VOLTAGE_OUTPUT, "voltage");
@@ -105,7 +109,9 @@ struct TapeMachineModule : Module
       configOutput(Outputs::MAX_OUTPUT, "maximum");
       getOutputInfo(Outputs::MAX_OUTPUT)->description = "default range +/- 1V. adjust in context menu.";
       configOutput(Outputs::RANDOM_PULSE_OUTPUT, "random pulse");
+      getOutputInfo(Outputs::RANDOM_PULSE_OUTPUT)->description = "outputs pulse signal (set mode in context menu) when a bit is toggled.";
       configSwitch(Params::DIR_PARAM, 0, 1, 0, "direction", {"left-to-right", "right-to-left"});
+      getParamQuantity(Params::DIR_PARAM)->description = "direction to shift bits.";
       for (int i = 0; i < 16; i++)
       {
          configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i));
@@ -275,9 +281,9 @@ struct TapeMachineModule : Module
                tape ^= masks[0];
             }
             else
-         {
-            tape ^= masks[15];
-         }
+            {
+               tape ^= masks[15];
+            }
             bit_toggled = true;
             if (random_pulse_mode == 0)
             {
