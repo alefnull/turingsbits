@@ -5,8 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "C:\\msys64\\home\\alefnull\\Rack-SDK\\include\\**",
-                "C:\\msys64\\home\\alefnull\\Rack-SDK\\dep\\**",
-                "C:/msys64/home/alefnull/Rack-SDK/include"
+                "C:\\msys64\\home\\alefnull\\Rack-SDK\\dep\\**"
             ],
             "defines": [
                 "_DEBUG",
