@@ -30,6 +30,7 @@ struct TapeMachineModule : Module
       ENUMS(PULSE_OUTPUT, 16),
       MIN_OUTPUT,
       MAX_OUTPUT,
+      RANDOM_PULSE_OUTPUT,
       NUM_OUTPUTS
    };
    enum Lights
@@ -41,6 +42,8 @@ struct TapeMachineModule : Module
    };
 
    uint16_t tape = 0b0;
+   bool bit_toggled = false;
+   dsp::PulseGenerator random_pulse;
    uint16_t masks[16] = {
        0b0000000000000001,
        0b0000000000000010,
@@ -68,14 +71,10 @@ struct TapeMachineModule : Module
    CVRange min_voltage_range;
    CVRange max_voltage_range;
 
-   // float voltage = 0.f;
-   // float flipped_voltage = 0.f;
-   // float min_voltage = 0.f;
-   // float max_voltage = 0.f;
-
    dsp::SchmittTrigger clock;
 
-   size_t gate_mode = 1;
+   size_t bit_pulse_mode = 1;
+   size_t random_pulse_mode = 1;
    std::vector<std::string> mode_labels = {"trigger", "clock", "hold"};
    std::vector<dsp::PulseGenerator> bit_pulses;
    std::vector<dsp::PulseGenerator> light_pulses;
@@ -105,6 +104,7 @@ struct TapeMachineModule : Module
       getOutputInfo(Outputs::MIN_OUTPUT)->description = "default range +/- 1V. adjust in context menu.";
       configOutput(Outputs::MAX_OUTPUT, "maximum");
       getOutputInfo(Outputs::MAX_OUTPUT)->description = "default range +/- 1V. adjust in context menu.";
+      configOutput(Outputs::RANDOM_PULSE_OUTPUT, "random pulse");
       configSwitch(Params::DIR_PARAM, 0, 1, 0, "direction", {"left-to-right", "right-to-left"});
       for (int i = 0; i < 16; i++)
       {
@@ -117,7 +117,8 @@ struct TapeMachineModule : Module
    void onReset() override
    {
       tape = 0b0;
-      gate_mode = 1;
+      bit_pulse_mode = 1;
+      random_pulse_mode = 1;
 
       voltage_range.cv_a = -1;
       voltage_range.cv_b = 1;
@@ -145,7 +146,8 @@ struct TapeMachineModule : Module
    json_t *dataToJson() override
    {
       json_t *rootJ = json_object();
-      json_object_set_new(rootJ, "mode", json_integer(gate_mode));
+      json_object_set_new(rootJ, "bit_pulse_mode", json_integer(bit_pulse_mode));
+      json_object_set_new(rootJ, "random_pulse_mode", json_integer(random_pulse_mode));
       json_object_set_new(rootJ, "voltage_range", voltage_range.dataToJson());
       json_object_set_new(rootJ, "flipped_voltage_range", flipped_voltage_range.dataToJson());
       json_object_set_new(rootJ, "min_voltage_range", min_voltage_range.dataToJson());
@@ -155,10 +157,15 @@ struct TapeMachineModule : Module
 
    void dataFromJson(json_t *rootJ) override
    {
-      json_t *modeJ = json_object_get(rootJ, "mode");
-      if (modeJ)
+      json_t *bitModeJ = json_object_get(rootJ, "bit_pulse_mode");
+      if (bitModeJ)
       {
-         gate_mode = json_integer_value(modeJ);
+         bit_pulse_mode = json_integer_value(bitModeJ);
+      }
+      json_t *randomModeJ = json_object_get(rootJ, "random_pulse_mode");
+      if (randomModeJ)
+      {
+         random_pulse_mode = json_integer_value(randomModeJ);
       }
       json_t *vRangeJ = json_object_get(rootJ, "voltage_range");
       if (vRangeJ)
@@ -182,14 +189,24 @@ struct TapeMachineModule : Module
       }
    }
 
-   size_t getMode()
+   size_t getBitMode()
    {
-      return gate_mode;
+      return bit_pulse_mode;
    }
 
-   void setMode(size_t mode)
+   void setBitMode(size_t mode)
    {
-      gate_mode = mode;
+      bit_pulse_mode = mode;
+   }
+
+   size_t getRandomMode()
+   {
+      return random_pulse_mode;
+   }
+
+   void setRandomMode(size_t mode)
+   {
+      random_pulse_mode = mode;
    }
 
    const int PARAM_INTERVAL = 64;
@@ -261,6 +278,17 @@ struct TapeMachineModule : Module
          {
             tape ^= masks[15];
          }
+            bit_toggled = true;
+            if (random_pulse_mode == 0)
+            {
+               random_pulse.trigger(0.01f);
+            }
+         }
+         else
+         {
+            bit_toggled = false;
+         }
+
          if (clear)
          {
             // tape &= (~masks[15]);
@@ -269,6 +297,7 @@ struct TapeMachineModule : Module
                tape &= (~masks[15 << i]);
             }
          }
+
          if (set)
          {
             // tape |= masks[15];
@@ -301,7 +330,7 @@ struct TapeMachineModule : Module
       // trigger: output a default pulse from the associated PulseGenerator
       // clock/default: pass through the incoming clock signal
       // hold: hold the outgoing gate state at 10.0f as long as the bit is still set
-      switch (gate_mode)
+      switch (bit_pulse_mode)
       {
       case 0: // trigger
          for (int i = 0; i < 16; i++)
@@ -337,6 +366,22 @@ struct TapeMachineModule : Module
             outputs[PULSE_OUTPUT + i].setVoltage((tape & masks[i]) ? clock_input : 0.f);
             lights[BIT_LIGHT + i].setBrightness(((tape & masks[i]) && clock_input > 0.5f) ? 1.f : 0.f);
          }
+         break;
+      }
+
+      switch (random_pulse_mode)
+      {
+      case 0: // trigger
+         outputs[RANDOM_PULSE_OUTPUT].setVoltage(random_pulse.process(args.sampleTime) ? 10.f : 0.f);
+         break;
+      case 1: // clock
+         outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
+         break;
+      case 2: // hold
+         outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? 10.f : 0.f);
+         break;
+      default: // clock (1, default)
+         outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
          break;
       }
    }
@@ -389,7 +434,9 @@ struct TapeMachineModuleWidget : ModuleWidget
       addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::MIN_OUTPUT));
       x += dx * 2;
       addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::MAX_OUTPUT));
-      x -= dx * 7;
+      x += dx * 2;
+      addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::RANDOM_PULSE_OUTPUT));
+      x -= dx * 9;
       y += dy * 4;
       addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 15));
       x += dx * 3;
@@ -465,9 +512,12 @@ struct TapeMachineModuleWidget : ModuleWidget
       assert(module);
 
       menu->addChild(new MenuSeparator());
-      menu->addChild(createIndexSubmenuItem("pulse mode", module->mode_labels, [=]
-                                            { return module->getMode(); }, [=](size_t mode)
-                                            { module->setMode(mode); }));
+      menu->addChild(createIndexSubmenuItem("bit pulse mode", module->mode_labels, [=]
+                                            { return module->getBitMode(); }, [=](size_t mode)
+                                            { module->setBitMode(mode); }));
+      menu->addChild(createIndexSubmenuItem("random pulse mode", module->mode_labels, [=]
+                                            { return module->getRandomMode(); }, [=](size_t mode)
+                                            { module->setRandomMode(mode); }));
       menu->addChild(new MenuSeparator());
       module->voltage_range.addMenu(module, menu, "voltage range");
       module->flipped_voltage_range.addMenu(module, menu, "flipped voltage range");
