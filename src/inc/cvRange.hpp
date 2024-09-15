@@ -266,10 +266,10 @@ struct CVRange
         std::string curLabel = s_min + "V to " + s_max + "V";
 
         menu->addChild(createSubmenuItem(menuName, curLabel,
-                                         [=](Menu *menu)
+                                         [this](Menu *menu)
                                          {
                                              menu->addChild(createSubmenuItem("Custom", "",
-                                                                              [=](Menu *menu)
+                                                                              [this](Menu *menu)
                                                                               {
                                                                                   {
                                                                                       menu->addChild(createMenuLabel("Min Value"));
@@ -321,8 +321,8 @@ struct CVRange
 
                                              for (int pi = 0; pi < PRESET_COUNT; pi++)
                                              {
-                                                 menu->addChild(createCheckMenuItem(preset[pi].label, "", [=]()
-                                                                                    { return (min == preset[pi].min) && ((min + range) == preset[pi].max); }, [=]()
+                                                 menu->addChild(createCheckMenuItem(preset[pi].label, "", [this, pi, preset]()
+                                                                                    { return (min == preset[pi].min) && ((min + range) == preset[pi].max); }, [this, pi, preset]()
                                                                                     {
 							cv_a = preset[pi].min;
 							cv_b = preset[pi].max;
