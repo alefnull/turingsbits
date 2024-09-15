@@ -1,8 +1,8 @@
 RACK_DIR ?= ../Rack-SDK
 
-FLAGS += -std=c++17
-CFLAGS += -std=c++17
-CXXFLAGS += -std=c++17
+FLAGS += -std=c++20
+CFLAGS += -std=c++20
+CXXFLAGS += -std=c++20
 
 SOURCES += $(wildcard src/*.cpp)
 
