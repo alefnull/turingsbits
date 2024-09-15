@@ -2,6 +2,7 @@
 #include <bit>
 #include <random>
 #include <ctime>
+#include "inc/cvRange.hpp"
 
 struct TapeMachineModule : Module
 {
@@ -11,6 +12,7 @@ struct TapeMachineModule : Module
       CLEAR_PARAM,
       SET_PARAM,
       SHIFT_PARAM,
+      DIR_PARAM,
       NUM_PARAMS
    };
    enum Inputs
@@ -78,6 +80,8 @@ struct TapeMachineModule : Module
    std::vector<dsp::PulseGenerator> bit_pulses;
    std::vector<dsp::PulseGenerator> light_pulses;
 
+   bool rtl = false;
+
    TapeMachineModule()
    {
       config(Params::NUM_PARAMS, Inputs::NUM_INPUTS, Outputs::NUM_OUTPUTS, Lights::NUM_LIGHTS);
@@ -101,6 +105,7 @@ struct TapeMachineModule : Module
       getOutputInfo(Outputs::MIN_OUTPUT)->description = "default range +/- 1V. adjust in context menu.";
       configOutput(Outputs::MAX_OUTPUT, "maximum");
       getOutputInfo(Outputs::MAX_OUTPUT)->description = "default range +/- 1V. adjust in context menu.";
+      configSwitch(Params::DIR_PARAM, 0, 1, 0, "direction", {"left-to-right", "right-to-left"});
       for (int i = 0; i < 16; i++)
       {
          configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i));
@@ -195,6 +200,7 @@ struct TapeMachineModule : Module
       clear = params[CLEAR_PARAM].getValue();
       set = params[SET_PARAM].getValue();
       shift_amt = params[SHIFT_PARAM].getValue();
+      rtl = params[DIR_PARAM].getValue();
    }
 
    void process(const ProcessArgs &args) override
@@ -234,8 +240,24 @@ struct TapeMachineModule : Module
 
       if (new_clock)
       {
-         tape = (tape >> shift_amt) | (tape << (16 - shift_amt));
+         // tape = (tape >> shift_amt) | (tape << (16 - shift_amt));
+         // tape = std::rotr(tape, shift_amt);
+         if (rtl)
+         {
+            tape = std::rotl(tape, shift_amt);
+         }
+         else
+         {
+            tape = std::rotr(tape, shift_amt);
+         }
+
          if (noise >= prob)
+         {
+            if (rtl)
+            {
+               tape ^= masks[0];
+            }
+            else
          {
             tape ^= masks[15];
          }
@@ -356,6 +378,9 @@ struct TapeMachineModuleWidget : ModuleWidget
       x -= dx * 4;
       y += dy * 2;
       addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::CLOCK_INPUT));
+      x += dx * 2;
+      addParam(createParamCentered<CKSS>(Vec(x, y), module, TapeMachineModule::DIR_PARAM));
+      x -= dx * 2;
       y += dy * 2;
       addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::VOLTAGE_OUTPUT));
       x += dx * 2;

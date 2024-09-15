@@ -1,7 +1,6 @@
 #pragma once
 #include <rack.hpp>
 using namespace ::rack;
-#include "inc/cvRange.hpp"
 
 // Declare the Plugin, defined in plugin.cpp
 extern Plugin *pluginInstance;
