@@ -1,0 +1,24 @@
+{
+    "slug": "turings-bits",
+    "name": "turing's bits",
+    "version": "2.0.0",
+    "license": "GPL-3.0-or-later",
+    "brand": "alef's bits",
+    "author": "alefnull",
+    "authorEmail": "",
+    "authorUrl": "",
+    "pluginUrl": "",
+    "manualUrl": "",
+    "sourceUrl": "",
+    "donateUrl": "",
+    "changelogUrl": "",
+    "minRackVersion": "2.4.0",
+    "modules": [
+      {
+        "slug": "tape-machine",
+        "name": "tape machine",
+        "description": "a Turing Machine clone with some extra bits",
+        "tags": [ "random", "noise", "logic", "sequencer" ]
+      }
+    ]
+  }

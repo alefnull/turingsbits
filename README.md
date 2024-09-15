@@ -1,2 +1,3 @@
-# vcv-base-plugin
-a basic template repository to quickly get a new VCV Rack plugin set up.
+# turing's bits
+
+just a plugin for making random interesting stuff i don't want to put in alef's bits for whatever reason.
