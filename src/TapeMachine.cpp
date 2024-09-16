@@ -21,6 +21,7 @@ struct TapeMachineModule : Module
       CLEAR_INPUT,
       SET_INPUT,
       SHIFT_INPUT,
+      DIR_INPUT,
       NUM_INPUTS
    };
    enum Outputs
@@ -72,6 +73,7 @@ struct TapeMachineModule : Module
    CVRange max_voltage_range;
 
    dsp::SchmittTrigger clock;
+   dsp::SchmittTrigger dir_trigger;
 
    size_t bit_pulse_mode = 1;
    size_t random_pulse_mode = 1;
@@ -112,6 +114,8 @@ struct TapeMachineModule : Module
       getOutputInfo(Outputs::RANDOM_PULSE_OUTPUT)->description = "outputs pulse signal (set mode in context menu) when a bit is toggled.";
       configSwitch(Params::DIR_PARAM, 0, 1, 0, "direction", {"left-to-right", "right-to-left"});
       getParamQuantity(Params::DIR_PARAM)->description = "direction to shift bits.";
+      configInput(Inputs::DIR_INPUT, "direction");
+      getInputInfo(Inputs::DIR_INPUT)->description = "toggle direction to shift bits between left-to-right and right-to-left. expects 0-10V gate signal.";
       for (int i = 0; i < 16; i++)
       {
          configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i));
@@ -237,6 +241,15 @@ struct TapeMachineModule : Module
       if (inputs[SHIFT_INPUT].isConnected())
       {
          shift_amt = (int)((inputs[SHIFT_INPUT].getVoltage() / 10.f) * 15.f);
+      }
+
+      if (inputs[DIR_INPUT].isConnected())
+      {
+         if (dir_trigger.process(inputs[DIR_INPUT].getVoltage()))
+         {
+            rtl = !rtl;
+            getParamQuantity(DIR_PARAM)->setValue(rtl);
+         }
       }
 
       if (params[CLEAR_PARAM].getValue() > 0.f || inputs[CLEAR_INPUT].getVoltage() > 5.f)
@@ -431,7 +444,9 @@ struct TapeMachineModuleWidget : ModuleWidget
       addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::CLOCK_INPUT));
       x += dx * 2;
       addParam(createParamCentered<CKSS>(Vec(x, y), module, TapeMachineModule::DIR_PARAM));
-      x -= dx * 2;
+      x += dx * 2;
+      addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::DIR_INPUT));
+      x -= dx * 4;
       y += dy * 2;
       addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::VOLTAGE_OUTPUT));
       x += dx * 2;
