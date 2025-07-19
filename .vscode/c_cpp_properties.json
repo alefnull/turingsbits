@@ -27,7 +27,9 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/home/alef/dev/Rack/**",
+                "/home/alef/dev/Rack/dep/**"
             ],
             "defines": [],
             "cStandard": "c17",

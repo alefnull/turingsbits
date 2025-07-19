@@ -230,6 +230,16 @@ struct TapeMachineModule : Module
     rtl = params[DIR_PARAM].getValue();
   }
 
+  uint16_t rotl(uint16_t value, int shift)
+  {
+    return (value << shift) | (value >> (16 - shift));
+  }
+
+  uint16_t rotr(uint16_t value, int shift)
+  {
+    return (value >> shift) | (value << (16 - shift));
+  }
+
   void process(const ProcessArgs &args) override
   {
     if (++check_params > PARAM_INTERVAL)
@@ -280,11 +290,13 @@ struct TapeMachineModule : Module
       // tape = std::rotr(tape, shift_amt);
       if (rtl)
       {
-        tape = std::rotl(tape, shift_amt);
+        // tape = std::rotl(tape, shift_amt);
+        tape = rotl(tape, shift_amt);
       }
       else
       {
-        tape = std::rotr(tape, shift_amt);
+        // tape = std::rotr(tape, shift_amt);
+        tape = rotr(tape, shift_amt);
       }
 
       if (noise <= prob)
