@@ -13,6 +13,7 @@ struct TapeMachineModule : Module
     SET_PARAM,
     SHIFT_PARAM,
     DIR_PARAM,
+    DUAL_PARAM,
     NUM_PARAMS
   };
   enum Inputs
@@ -22,6 +23,7 @@ struct TapeMachineModule : Module
     SET_INPUT,
     SHIFT_INPUT,
     DIR_INPUT,
+    DUAL_INPUT,
     NUM_INPUTS
   };
   enum Outputs
@@ -42,10 +44,13 @@ struct TapeMachineModule : Module
     NUM_LIGHTS
   };
 
+  bool dual = false;
   uint16_t tape = 0b0;
+  uint8_t tapeA = 0, tapeB = 0; // New: dual 8-bit tapes
+  bool last_dual = false;       // Track previous mode for seamless switching
   bool bit_toggled = false;
   dsp::PulseGenerator random_pulse;
-  uint16_t masks[16] = {
+  uint16_t mask[16] = {
       0b0000000000000001,
       0b0000000000000010,
       0b0000000000000100,
@@ -63,7 +68,8 @@ struct TapeMachineModule : Module
       0b0100000000000000,
       0b1000000000000000};
   float prob = 0.5;
-  float noise = 0.f;
+  float noise_a = 0.f;
+  float noise_b = 0.f;
   bool clear = false;
   bool set = false;
   int shift_amt = 1;
@@ -95,6 +101,9 @@ struct TapeMachineModule : Module
     configParam(Params::SHIFT_PARAM, 1, 15, 1, "shift", " bit(s)");
     getParamQuantity(Params::SHIFT_PARAM)->description = "how many bits to shift with each clock pulse. (1-15 bits)";
     getParamQuantity(Params::SHIFT_PARAM)->snapEnabled = true;
+    configSwitch(Params::DUAL_PARAM, 0, 1, 0, "dual mode", {"single", "dual"});
+    configInput(Inputs::DUAL_INPUT, "dual mode");
+    getInputInfo(Inputs::DUAL_INPUT)->description = "toggle between single and dual mode. expects 0-10V gate signal.";
     configInput(Inputs::CLOCK_INPUT, "clock");
     configInput(Inputs::CLEAR_INPUT, "clear");
     getInputInfo(Inputs::CLEAR_INPUT)->description = "clears first bit on each clock pulse while input gate is high. expects 0-10V.";
@@ -126,9 +135,10 @@ struct TapeMachineModule : Module
 
   void onReset() override
   {
-    tape = 0b0;
-    bit_pulse_mode = 1;
-    random_pulse_mode = 1;
+    tape = 0;
+    tapeA = 0;
+    tapeB = 0;
+    last_dual = dual;
 
     voltage_range.cv_a = -1;
     voltage_range.cv_b = 1;
@@ -162,6 +172,17 @@ struct TapeMachineModule : Module
     json_object_set_new(rootJ, "flipped_voltage_range", flipped_voltage_range.dataToJson());
     json_object_set_new(rootJ, "min_voltage_range", min_voltage_range.dataToJson());
     json_object_set_new(rootJ, "max_voltage_range", max_voltage_range.dataToJson());
+    json_object_set_new(rootJ, "dual_mode", json_boolean(dual));
+    json_object_set_new(rootJ, "tape", json_integer(tape));
+    json_object_set_new(rootJ, "tapeA", json_integer(tapeA));
+    json_object_set_new(rootJ, "tapeB", json_integer(tapeB));
+    json_object_set_new(rootJ, "rtl", json_boolean(rtl));
+    json_object_set_new(rootJ, "last_dual", json_boolean(last_dual));
+    json_object_set_new(rootJ, "bit_toggled", json_boolean(bit_toggled));
+    json_object_set_new(rootJ, "prob", json_real(prob));
+    json_object_set_new(rootJ, "noise_a", json_real(noise_a));
+    json_object_set_new(rootJ, "noise_b", json_real(noise_b));
+    json_object_set_new(rootJ, "shift_amt", json_integer(shift_amt));
     return rootJ;
   }
 
@@ -197,6 +218,63 @@ struct TapeMachineModule : Module
     {
       max_voltage_range.dataFromJson(maxRangeJ);
     }
+    json_t *dualModeJ = json_object_get(rootJ, "dual_mode");
+    if (dualModeJ)
+    {
+      dual = json_is_true(dualModeJ);
+    }
+    json_t *tapeJ = json_object_get(rootJ, "tape");
+    if (tapeJ)
+    {
+      tape = json_integer_value(tapeJ);
+    }
+    json_t *tapeAJ = json_object_get(rootJ, "tapeA");
+    if (tapeAJ)
+    {
+      tapeA = json_integer_value(tapeAJ);
+    }
+    json_t *tapeBJ = json_object_get(rootJ, "tapeB");
+    if (tapeBJ)
+    {
+      tapeB = json_integer_value(tapeBJ);
+    }
+    json_t *rtlJ = json_object_get(rootJ, "rtl");
+    if (rtlJ)
+    {
+      rtl = json_is_true(rtlJ);
+    }
+    json_t *lastDualJ = json_object_get(rootJ, "last_dual");
+    if (lastDualJ)
+    {
+      last_dual = json_is_true(lastDualJ);
+    }
+    json_t *bitToggledJ = json_object_get(rootJ, "bit_toggled");
+    if (bitToggledJ)
+    {
+      bit_toggled = json_is_true(bitToggledJ);
+    }
+    json_t *probJ = json_object_get(rootJ, "prob");
+    if (probJ)
+    {
+      prob = json_real_value(probJ);
+    }
+    json_t *noiseAJ = json_object_get(rootJ, "noise_a");
+    if (noiseAJ)
+    {
+      noise_a = json_real_value(noiseAJ);
+    }
+    json_t *noiseBJ = json_object_get(rootJ, "noise_b");
+    if (noiseBJ)
+    {
+      noise_b = json_real_value(noiseBJ);
+    }
+    json_t *shiftAmtJ = json_object_get(rootJ, "shift_amt");
+    if (shiftAmtJ)
+    {
+      shift_amt = json_integer_value(shiftAmtJ);
+      if (shift_amt < 1) shift_amt = 1;
+      if (shift_amt > 15) shift_amt = 15;
+    }
   }
 
   size_t getBitMode()
@@ -228,16 +306,46 @@ struct TapeMachineModule : Module
     set = params[SET_PARAM].getValue();
     shift_amt = params[SHIFT_PARAM].getValue();
     rtl = params[DIR_PARAM].getValue();
+    dual = params[DUAL_PARAM].getValue() > 0.f;
+
+    if (!dual)
+    {
+      for (int i = 0; i < 16; i++)
+      {
+        configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i));
+      }
+    }
+    else
+    {
+      for (int i = 0; i < 8; i++)
+      {
+        configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i) + " (A)");
+      }
+      for (int i = 8; i < 16; i++)
+      {
+        configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i - 8) + " (B)");
+      }
+    }
   }
 
-  uint16_t rotl(uint16_t value, int shift)
+  uint16_t rotl(uint16_t value, int shift, int bits = 16)
   {
-    return (value << shift) | (value >> (16 - shift));
+    shift = shift % bits;
+    return ((value << shift) | (value >> (bits - shift))) & ((1u << bits) - 1);
   }
 
-  uint16_t rotr(uint16_t value, int shift)
+  uint16_t rotr(uint16_t value, int shift, int bits = 16)
   {
-    return (value >> shift) | (value << (16 - shift));
+    shift = shift % bits;
+    return ((value >> shift) | (value << (bits - shift))) & ((1u << bits) - 1);
+  }
+
+  void updateDualFromSingle() {
+    tapeA = (tape >> 8) & 0xFF;
+    tapeB = tape & 0xFF;
+  }
+  void updateSingleFromDual() {
+    tape = ((uint16_t)tapeA << 8) | tapeB;
   }
 
   void process(const ProcessArgs &args) override
@@ -246,6 +354,16 @@ struct TapeMachineModule : Module
     {
       check_params = 0;
       processParams();
+    }
+
+    // Detect mode change and convert tape representation
+    if (dual != last_dual) {
+      if (dual) {
+        updateDualFromSingle();
+      } else {
+        updateSingleFromDual();
+      }
+      last_dual = dual;
     }
 
     if (inputs[SHIFT_INPUT].isConnected())
@@ -262,81 +380,158 @@ struct TapeMachineModule : Module
       }
     }
 
-    if (params[CLEAR_PARAM].getValue() > 0.f || inputs[CLEAR_INPUT].getVoltage() > 5.f)
+    if (inputs[CLEAR_INPUT].getVoltage() > 5.f)
     {
       clear = true;
     }
-    else
-    {
-      clear = false;
-    }
-    if (params[SET_PARAM].getValue() > 0.f || inputs[SET_INPUT].getVoltage() > 5.f)
+
+    if (inputs[SET_INPUT].getVoltage() > 5.f)
     {
       set = true;
     }
-    else
-    {
-      set = false;
-    }
 
-    noise = random::uniform();
+    noise_a = random::uniform();
+    noise_b = random::uniform();
 
     float clock_input = inputs[CLOCK_INPUT].getVoltage();
     bool new_clock = clock.process(clock_input);
 
     if (new_clock)
     {
-      // tape = (tape >> shift_amt) | (tape << (16 - shift_amt));
-      // tape = std::rotr(tape, shift_amt);
-      if (rtl)
+      ///////////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////////////
+      //////////////////   CHANGE TO INCLUDE DUAL MODE   ////////////////////////////
+      ///////////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////////////
+      /// in dual mode, split the tape into two halves, and treat them separately ///
+      ///////////////////////////////////////////////////////////////////////////////
+
+      if (dual && !last_dual)
       {
-        // tape = std::rotl(tape, shift_amt);
-        tape = rotl(tape, shift_amt);
+        // Switch to dual mode: duplicate the current tape state to both tapes
+        tapeA = tape & 0xFF;
+        tapeB = (tape >> 8) & 0xFF;
       }
-      else
+      else if (!dual && last_dual)
       {
-        // tape = std::rotr(tape, shift_amt);
-        tape = rotr(tape, shift_amt);
+        // Switch to single mode: combine both tapes into the main tape
+        tape = (tapeA & 0xFF) | ((tapeB & 0xFF) << 8);
       }
 
-      if (noise <= prob)
-      {
+      last_dual = dual; // Update the last_dual state
+
+      if (dual) {
+        // Process tapeA (upper 8 bits)
+        if (rtl) {
+          tapeA = (tapeA << shift_amt) | (tapeA >> (8 - shift_amt));
+        } else {
+          tapeA = (tapeA >> shift_amt) | (tapeA << (8 - shift_amt));
+        }
+        // Process tapeB (lower 8 bits)
+        if (rtl) {
+          tapeB = (tapeB << shift_amt) | (tapeB >> (8 - shift_amt));
+        } else {
+          tapeB = (tapeB >> shift_amt) | (tapeB << (8 - shift_amt));
+        }
+
+        // Random toggle (independent noise for each tape in dual mode)
+        if (dual) {
+          bool toggledA = false, toggledB = false;
+          if (noise_a <= prob) {
+            if (rtl)
+              tapeA ^= 0x01; // Toggle LSB of tapeA
+            else
+              tapeA ^= 0x80; // Toggle MSB of tapeA
+            toggledA = true;
+          }
+          if (noise_b <= prob) {
+            if (rtl)
+              tapeB ^= 0x01; // Toggle LSB of tapeB
+            else
+              tapeB ^= 0x80; // Toggle MSB of tapeB
+            toggledB = true;
+          }
+          bit_toggled = toggledA || toggledB;
+          if (bit_toggled && random_pulse_mode == 0)
+            random_pulse.trigger(0.01f);
+        } else {
+          if (noise_a <= prob) {
+            if (rtl)
+              tapeA ^= 0x01, tapeB ^= 0x01;
+            else
+              tapeA ^= 0x80, tapeB ^= 0x80;
+            bit_toggled = true;
+            if (random_pulse_mode == 0)
+              random_pulse.trigger(0.01f);
+          } else {
+            bit_toggled = false;
+          }
+        }
+
+        // Clear/set logic for both tapes
+        if (clear) {
+          for (int i = 0; i < shift_amt; i++) {
+            tapeA &= ~(rtl ? (1 << i) : (0x80 >> i));
+            tapeB &= ~(rtl ? (1 << i) : (0x80 >> i));
+          }
+        }
+        if (set) {
+          for (int i = 0; i < shift_amt; i++) {
+            tapeA |= (rtl ? (1 << i) : (0x80 >> i));
+            tapeB |= (rtl ? (1 << i) : (0x80 >> i));
+          }
+        }
+
+        // Update single tape for outputs
+        updateSingleFromDual();
+      } else {
         if (rtl)
         {
-          tape ^= masks[0];
+          tape = rotl(tape, shift_amt);
         }
         else
         {
-          tape ^= masks[15];
+          tape = rotr(tape, shift_amt);
         }
-        bit_toggled = true;
-        if (random_pulse_mode == 0)
+        if (noise_a <= prob)
         {
-          random_pulse.trigger(0.01f);
+          if (rtl)
+          {
+            tape ^= mask[0];
+          }
+          else
+          {
+            tape ^= mask[15];
+          }
+          bit_toggled = true;
+          if (random_pulse_mode == 0)
+          {
+            random_pulse.trigger(0.01f);
+          }
         }
-      }
-      else
-      {
-        bit_toggled = false;
+        else
+        {
+          bit_toggled = false;
+        }
+
+        if (clear)
+        {
+          for (int i = 0; i < shift_amt; i++)
+          {
+            tape &= (~mask[15 << i]);
+          }
+        }
+
+        if (set)
+        {
+          for (int i = 0; i < shift_amt; i++)
+          {
+            tape |= mask[15 << i];
+          }
+        }
       }
 
-      if (clear)
-      {
-        // tape &= (~masks[15]);
-        for (int i = 0; i < shift_amt; i++)
-        {
-          tape &= (~masks[15 << i]);
-        }
-      }
-
-      if (set)
-      {
-        // tape |= masks[15];
-        for (int i = 0; i < shift_amt; i++)
-        {
-          tape |= masks[15 << i];
-        }
-      }
+      /////////////////////////////////////////////////////////////////////////////
     }
 
     lights[CLEAR_LIGHT].setBrightness(clear ? 1.0f : 0.0f);
@@ -357,16 +552,12 @@ struct TapeMachineModule : Module
     outputs[MIN_OUTPUT].setVoltage(min_voltage);
     outputs[MAX_OUTPUT].setVoltage(max_voltage);
 
-    // for each individual bit output, on each clock trigger (rising edge), if the bit is set:
-    // trigger: output a default pulse from the associated PulseGenerator
-    // clock/default: pass through the incoming clock signal
-    // hold: hold the outgoing gate state at 10.0f as long as the bit is still set
     switch (bit_pulse_mode)
     {
     case 0: // trigger
       for (int i = 0; i < 16; i++)
       {
-        if (new_clock && (tape & masks[i]))
+        if (new_clock && (tape & mask[i]))
         {
           bit_pulses[i].trigger(0.01f);
           light_pulses[i].trigger(0.05f);
@@ -374,28 +565,28 @@ struct TapeMachineModule : Module
         bool bp = bit_pulses[i].process(args.sampleTime);
         bool lp = light_pulses[i].process(args.sampleTime);
         outputs[PULSE_OUTPUT + i].setVoltage(bp ? 10.f : 0.f);
-        lights[BIT_LIGHT + i].setBrightness(((tape & masks[i]) && lp) ? 1.f : 0.f);
+        lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) && lp) ? 1.f : 0.f);
       }
       break;
     case 1: // clock
       for (int i = 0; i < 16; i++)
       {
-        outputs[PULSE_OUTPUT + i].setVoltage((tape & masks[i]) ? clock_input : 0.f);
-        lights[BIT_LIGHT + i].setBrightness(((tape & masks[i]) && clock_input > 0.5f) ? 1.f : 0.f);
+        outputs[PULSE_OUTPUT + i].setVoltage((tape & mask[i]) ? clock_input : 0.f);
+        lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) && clock_input > 0.5f) ? 1.f : 0.f);
       }
       break;
     case 2: // hold
       for (int i = 0; i < 16; i++)
       {
-        outputs[PULSE_OUTPUT + i].setVoltage((tape & masks[i]) ? 10.f : 0.f);
-        lights[BIT_LIGHT + i].setBrightness((tape & masks[i]) ? 1.f : 0.f);
+        outputs[PULSE_OUTPUT + i].setVoltage((tape & mask[i]) ? 10.f : 0.f);
+        lights[BIT_LIGHT + i].setBrightness((tape & mask[i]) ? 1.f : 0.f);
       }
       break;
     default: // clock (1, default)
       for (int i = 0; i < 16; i++)
       {
-        outputs[PULSE_OUTPUT + i].setVoltage((tape & masks[i]) ? clock_input : 0.f);
-        lights[BIT_LIGHT + i].setBrightness(((tape & masks[i]) && clock_input > 0.5f) ? 1.f : 0.f);
+        outputs[PULSE_OUTPUT + i].setVoltage((tape & mask[i]) ? clock_input : 0.f);
+        lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) && clock_input > 0.5f) ? 1.f : 0.f);
       }
       break;
     }
@@ -458,7 +649,11 @@ struct TapeMachineModuleWidget : ModuleWidget
     addParam(createParamCentered<CKSS>(Vec(x, y), module, TapeMachineModule::DIR_PARAM));
     x += dx * 2;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::DIR_INPUT));
-    x -= dx * 4;
+    x += dx * 2;
+    addParam(createParamCentered<CKSS>(Vec(x, y), module, TapeMachineModule::DUAL_PARAM));
+    x += dx * 2;
+    addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::DUAL_INPUT));
+    x -= dx * 8;
     y += dy * 2;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::VOLTAGE_OUTPUT));
     x += dx * 2;
