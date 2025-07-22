@@ -55,8 +55,8 @@ struct TapeMachineModule : Module
 
   bool dual = false;
   uint16_t tape = 0b0;
-  uint8_t tapeA = 0, tapeB = 0; // New: dual 8-bit tapes
-  bool last_dual = false;       // Track previous mode for seamless switching
+  uint8_t tapeA = 0, tapeB = 0; 
+  bool last_dual = false;       
   bool bit_toggled = false;
   dsp::PulseGenerator random_pulse;
   uint16_t mask[16] = {
@@ -349,7 +349,7 @@ struct TapeMachineModule : Module
     for (int i = 0; i < 8; i++)
     {
       int mode = (int)params[GRID_LOGIC_PARAM + i].getValue();
-      if (mode < 0 || mode > 2) mode = LogicMode::AND; // Default to AND if out of range
+      if (mode < 0 || mode > 2) mode = LogicMode::AND; 
       switch (mode)
       {
       case LogicMode::AND:
@@ -412,7 +412,7 @@ struct TapeMachineModule : Module
       processParams();
     }
 
-    // Detect mode change and convert tape representation
+    
     if (dual != last_dual) {
       if (dual) {
         updateDualFromSingle();
@@ -454,57 +454,57 @@ struct TapeMachineModule : Module
 
     if (new_clock)
     {
-      ///////////////////////////////////////////////////////////////////////////////
-      ///////////////////////////////////////////////////////////////////////////////
-      //////////////////   CHANGE TO INCLUDE DUAL MODE   ////////////////////////////
-      ///////////////////////////////////////////////////////////////////////////////
-      ///////////////////////////////////////////////////////////////////////////////
-      /// in dual mode, split the tape into two halves, and treat them separately ///
-      ///////////////////////////////////////////////////////////////////////////////
+      
+      
+      
+      
+      
+      
+      
 
       if (dual && !last_dual)
       {
-        // Switch to dual mode: duplicate the current tape state to both tapes
+        
         tapeA = tape & 0xFF;
         tapeB = (tape >> 8) & 0xFF;
       }
       else if (!dual && last_dual)
       {
-        // Switch to single mode: combine both tapes into the main tape
+        
         tape = (tapeA & 0xFF) | ((tapeB & 0xFF) << 8);
       }
 
-      last_dual = dual; // Update the last_dual state
+      last_dual = dual; 
 
       if (dual) {
-        // Process tapeA (upper 8 bits)
+        
         if (rtl) {
           tapeA = (tapeA << shift_amt) | (tapeA >> (8 - shift_amt));
         } else {
           tapeA = (tapeA >> shift_amt) | (tapeA << (8 - shift_amt));
         }
-        // Process tapeB (lower 8 bits)
+        
         if (rtl) {
           tapeB = (tapeB << shift_amt) | (tapeB >> (8 - shift_amt));
         } else {
           tapeB = (tapeB >> shift_amt) | (tapeB << (8 - shift_amt));
         }
 
-        // Random toggle (independent noise for each tape in dual mode)
+        
         if (dual) {
           bool toggledA = false, toggledB = false;
           if (noise_a <= prob) {
             if (rtl)
-              tapeA ^= 0x01; // Toggle LSB of tapeA
+              tapeA ^= 0x01; 
             else
-              tapeA ^= 0x80; // Toggle MSB of tapeA
+              tapeA ^= 0x80; 
             toggledA = true;
           }
           if (noise_b <= prob) {
             if (rtl)
-              tapeB ^= 0x01; // Toggle LSB of tapeB
+              tapeB ^= 0x01; 
             else
-              tapeB ^= 0x80; // Toggle MSB of tapeB
+              tapeB ^= 0x80; 
             toggledB = true;
           }
           bit_toggled = toggledA || toggledB;
@@ -524,7 +524,7 @@ struct TapeMachineModule : Module
           }
         }
 
-        // Clear/set logic for both tapes
+        
         if (clear) {
           for (int i = 0; i < shift_amt; i++) {
             tapeA &= ~(rtl ? (1 << i) : (0x80 >> i));
@@ -538,7 +538,7 @@ struct TapeMachineModule : Module
           }
         }
 
-        // Update single tape for outputs
+        
         updateSingleFromDual();
       } else {
         if (rtl)
@@ -587,7 +587,7 @@ struct TapeMachineModule : Module
         }
       }
 
-      /////////////////////////////////////////////////////////////////////////////
+      
     }
 
     lights[CLEAR_LIGHT].setBrightness(clear ? 1.0f : 0.0f);
@@ -610,7 +610,7 @@ struct TapeMachineModule : Module
 
     switch (bit_pulse_mode)
     {
-    case 0: // trigger
+    case 0: 
       for (int i = 0; i < 16; i++)
       {
         if (new_clock && (tape & mask[i]))
@@ -624,21 +624,21 @@ struct TapeMachineModule : Module
         lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) && lp) ? 1.f : 0.f);
       }
       break;
-    case 1: // clock
+    case 1: 
       for (int i = 0; i < 16; i++)
       {
         outputs[PULSE_OUTPUT + i].setVoltage((tape & mask[i]) ? clock_input : 0.f);
         lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) && clock_input > 0.5f) ? 1.f : 0.f);
       }
       break;
-    case 2: // hold
+    case 2: 
       for (int i = 0; i < 16; i++)
       {
         outputs[PULSE_OUTPUT + i].setVoltage((tape & mask[i]) ? 10.f : 0.f);
         lights[BIT_LIGHT + i].setBrightness((tape & mask[i]) ? 1.f : 0.f);
       }
       break;
-    default: // clock (1, default)
+    default: 
       for (int i = 0; i < 16; i++)
       {
         outputs[PULSE_OUTPUT + i].setVoltage((tape & mask[i]) ? clock_input : 0.f);
@@ -649,41 +649,61 @@ struct TapeMachineModule : Module
 
     switch (random_pulse_mode)
     {
-    case 0: // trigger
+    case 0: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(random_pulse.process(args.sampleTime) ? 10.f : 0.f);
       break;
-    case 1: // clock
+    case 1: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
       break;
-    case 2: // hold
+    case 2: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? 10.f : 0.f);
       break;
-    default: // clock (1, default)
+    default: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
       break;
     }
 
-    // grid logic outputs: logic operations on each 'column' (ie 2^15 & 2^7, 2^14 | 2^6, etc.)
-    // simply pass through the 'top' pulse output if the logic op is true for that column
-    for (int i = 0; i < 8; i++)
-    {
-      uint16_t column_mask = (1 << (15 - i)) | (1 << (7 - i));
-      uint16_t column_value = tape & column_mask;
-      bool logic_result = false;
-      switch (grid_logic_modes[i])
-      {
-      case LogicMode::AND:
-        logic_result = (column_value == column_mask);
-        break;
-      case LogicMode::OR:
-        logic_result = (column_value != 0);
-        break;
-      case LogicMode::XOR:
-        logic_result = (column_value == (1 << (15 - i))) ^ (column_value == (1 << (7 - i)));
-        break;
-      }
-      outputs[GRID_LOGIC_OUTPUT + i].setVoltage(logic_result ? 10.f : 0.f);
-      lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_result ? 1.f : 0.f);
+    
+    for (int i = 0; i < 8; i++) {
+        
+        bool bitA, bitB;
+        if (dual) {
+            bitA = (tapeA >> (7 - i)) & 0x1; 
+            bitB = (tapeB >> (7 - i)) & 0x1; 
+        } else {
+            bitA = (tape >> (15 - i)) & 0x1; 
+            bitB = (tape >> (7 - i)) & 0x1;  
+        }
+
+        bool logic_result = false;
+        switch (grid_logic_modes[i]) {
+            case LogicMode::AND: logic_result = bitA && bitB; break;
+            case LogicMode::OR:  logic_result = bitA || bitB; break;
+            case LogicMode::XOR: logic_result = bitA != bitB; break;
+        }
+
+        
+        float out = 0.f;
+        switch (bit_pulse_mode) {
+            case 0: 
+                
+                if (logic_result && new_clock) {
+                    bit_pulses[16 + i].trigger(0.01f); 
+                }
+                out = bit_pulses[16 + i].process(args.sampleTime) ? 10.f : 0.f;
+                break;
+            case 1: 
+                out = logic_result ? clock_input : 0.f;
+                break;
+            case 2: 
+                out = logic_result ? 10.f : 0.f;
+                break;
+            default:
+                out = logic_result ? clock_input : 0.f;
+                break;
+        }
+        outputs[GRID_LOGIC_OUTPUT + i].setVoltage(out);
+        lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_result ? 1.f : 0.f);
     }
   }
 };
@@ -722,7 +742,7 @@ struct TapeMachineModuleWidget : ModuleWidget
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::SET_INPUT));
     x += dx * 1.5;
     addChild(createLightCentered<MediumLight<BlueLight>>(Vec(x, y), module, TapeMachineModule::SET_LIGHT));
-    // x -= dx * 10;
+    
     x -= dx * 3;
     y += dy * 3;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::CLOCK_INPUT));
