@@ -14,6 +14,7 @@ struct TapeMachineModule : Module
     SHIFT_PARAM,
     DIR_PARAM,
     DUAL_PARAM,
+    ENUMS(GRID_LOGIC_PARAM, 8),
     NUM_PARAMS
   };
   enum Inputs
@@ -34,6 +35,7 @@ struct TapeMachineModule : Module
     MIN_OUTPUT,
     MAX_OUTPUT,
     RANDOM_PULSE_OUTPUT,
+    ENUMS(GRID_LOGIC_OUTPUT, 8),
     NUM_OUTPUTS
   };
   enum Lights
@@ -41,7 +43,14 @@ struct TapeMachineModule : Module
     ENUMS(BIT_LIGHT, 16),
     CLEAR_LIGHT,
     SET_LIGHT,
+    ENUMS(GRID_LOGIC_LIGHT, 8),
     NUM_LIGHTS
+  };
+  enum LogicMode
+  {
+    AND,
+    OR,
+    XOR
   };
 
   bool dual = false;
@@ -86,6 +95,7 @@ struct TapeMachineModule : Module
   std::vector<std::string> mode_labels = {"trigger", "clock", "hold"};
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
+  LogicMode grid_logic_modes[8] = {LogicMode::AND};
 
   bool rtl = false;
 
@@ -125,6 +135,11 @@ struct TapeMachineModule : Module
     getParamQuantity(Params::DIR_PARAM)->description = "direction to shift bits.";
     configInput(Inputs::DIR_INPUT, "direction");
     getInputInfo(Inputs::DIR_INPUT)->description = "toggle direction to shift bits between left-to-right and right-to-left. expects 0-10V gate signal.";
+    for (int i = 0; i < 8; i++)
+    {
+      configSwitch(Params::GRID_LOGIC_PARAM + i, 0, 2, 0, "column " + std::to_string(i + 1) + " logic", {"AND", "OR", "XOR"});
+      configOutput(Outputs::GRID_LOGIC_OUTPUT + i, "column " + std::to_string(i + 1) + " logic");
+    }
     for (int i = 0; i < 16; i++)
     {
       configOutput(Outputs::PULSE_OUTPUT + i, "bit 2^" + std::to_string(i));
@@ -160,6 +175,12 @@ struct TapeMachineModule : Module
     {
       bit_pulses[i].reset();
       light_pulses[i].reset();
+      if (i < 8)
+      {
+        params[Params::GRID_LOGIC_PARAM + i].setValue(LogicMode::AND);
+        outputs[Outputs::GRID_LOGIC_OUTPUT + i].setVoltage(0.f);
+        lights[Lights::GRID_LOGIC_LIGHT + i].setBrightness(0.f);
+      }
     }
   }
 
@@ -183,6 +204,11 @@ struct TapeMachineModule : Module
     json_object_set_new(rootJ, "noise_a", json_real(noise_a));
     json_object_set_new(rootJ, "noise_b", json_real(noise_b));
     json_object_set_new(rootJ, "shift_amt", json_integer(shift_amt));
+    for (int i = 0; i < 8; i++)
+    {
+      std::string logicModeXJ = "grid_logic_mode_" + std::to_string(i);
+      json_object_set_new(rootJ, logicModeXJ.c_str(), json_integer(static_cast<int>(params[Params::GRID_LOGIC_PARAM + i].getValue())));
+    }
     return rootJ;
   }
 
@@ -275,6 +301,18 @@ struct TapeMachineModule : Module
       if (shift_amt < 1) shift_amt = 1;
       if (shift_amt > 15) shift_amt = 15;
     }
+    for (int i = 0; i < 8; i++)
+    {
+      std::string logicModeX = "grid_logic_mode_" + std::to_string(i);
+      json_t *logicModeJ = json_object_get(rootJ, logicModeX.c_str());
+      if (logicModeJ)
+      {
+        int modeValue = json_integer_value(logicModeJ);
+        if (modeValue >= 0 && modeValue <= 2) {
+          params[Params::GRID_LOGIC_PARAM + i].setValue(static_cast<float>(modeValue));
+        }
+      }
+    }
   }
 
   size_t getBitMode()
@@ -307,6 +345,24 @@ struct TapeMachineModule : Module
     shift_amt = params[SHIFT_PARAM].getValue();
     rtl = params[DIR_PARAM].getValue();
     dual = params[DUAL_PARAM].getValue() > 0.f;
+
+    for (int i = 0; i < 8; i++)
+    {
+      int mode = (int)params[GRID_LOGIC_PARAM + i].getValue();
+      if (mode < 0 || mode > 2) mode = LogicMode::AND; // Default to AND if out of range
+      switch (mode)
+      {
+      case LogicMode::AND:
+        grid_logic_modes[i] = LogicMode::AND;
+        break;
+      case LogicMode::OR:
+        grid_logic_modes[i] = LogicMode::OR;
+        break;
+      case LogicMode::XOR:
+        grid_logic_modes[i] = LogicMode::XOR;
+        break;
+      }
+    }
 
     if (!dual)
     {
@@ -606,6 +662,29 @@ struct TapeMachineModule : Module
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
       break;
     }
+
+    // grid logic outputs: logic operations on each 'column' (ie 2^15 & 2^7, 2^14 | 2^6, etc.)
+    // simply pass through the 'top' pulse output if the logic op is true for that column
+    for (int i = 0; i < 8; i++)
+    {
+      uint16_t column_mask = (1 << (15 - i)) | (1 << (7 - i));
+      uint16_t column_value = tape & column_mask;
+      bool logic_result = false;
+      switch (grid_logic_modes[i])
+      {
+      case LogicMode::AND:
+        logic_result = (column_value == column_mask);
+        break;
+      case LogicMode::OR:
+        logic_result = (column_value != 0);
+        break;
+      case LogicMode::XOR:
+        logic_result = (column_value == (1 << (15 - i))) ^ (column_value == (1 << (7 - i)));
+        break;
+      }
+      outputs[GRID_LOGIC_OUTPUT + i].setVoltage(logic_result ? 10.f : 0.f);
+      lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_result ? 1.f : 0.f);
+    }
   }
 };
 
@@ -614,12 +693,13 @@ struct TapeMachineModuleWidget : ModuleWidget
   TapeMachineModuleWidget(TapeMachineModule *module)
   {
     setModule(module);
-    setPanel(createPanel(asset::plugin(pluginInstance, "res/tape-machine.svg")));
+    SvgPanel *panel = createPanel(asset::plugin(pluginInstance, "res/tape-machine-v2.svg"));
+    setPanel(panel);
 
     float dx = RACK_GRID_WIDTH;
     float dy = RACK_GRID_WIDTH;
-    float x_start = dx * 3;
-    float y_start = dy * 5;
+    float x_start = panel->getSize().x / 2;
+    float y_start = dy * 6;
     float x = x_start;
     float y = y_start;
 
@@ -628,24 +708,25 @@ struct TapeMachineModuleWidget : ModuleWidget
     addParam(createParamCentered<SmallBitKnob>(Vec(x, y), module, TapeMachineModule::SHIFT_PARAM));
     x += dx * 2;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::SHIFT_INPUT));
-    x += dx * 4;
+    x = dx * 5;
+    y = dy * 5.25;
     addParam(createParamCentered<LEDButton>(Vec(x, y), module, TapeMachineModule::CLEAR_PARAM));
-    x += dx * 2;
+    x += dx * 1.5;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::CLEAR_INPUT));
-    x += dx * 2;
+    x += dx * 1.5;
     addChild(createLightCentered<MediumLight<GreenLight>>(Vec(x, y), module, TapeMachineModule::CLEAR_LIGHT));
-    x -= dx * 4;
-    y += dy * 2;
+    x -= dx * 3;
+    y += dy * 1.5;
     addParam(createParamCentered<LEDButton>(Vec(x, y), module, TapeMachineModule::SET_PARAM));
-    x += dx * 2;
+    x += dx * 1.5;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::SET_INPUT));
-    x += dx * 2;
+    x += dx * 1.5;
     addChild(createLightCentered<MediumLight<BlueLight>>(Vec(x, y), module, TapeMachineModule::SET_LIGHT));
-    x -= dx * 10;
-    x -= dx * 4;
-    y += dy * 2;
+    // x -= dx * 10;
+    x -= dx * 3;
+    y += dy * 3;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::CLOCK_INPUT));
-    x += dx * 2;
+    x += dx * 6;
     addParam(createParamCentered<CKSS>(Vec(x, y), module, TapeMachineModule::DIR_PARAM));
     x += dx * 2;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::DIR_INPUT));
@@ -653,8 +734,8 @@ struct TapeMachineModuleWidget : ModuleWidget
     addParam(createParamCentered<CKSS>(Vec(x, y), module, TapeMachineModule::DUAL_PARAM));
     x += dx * 2;
     addInput(createInputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::DUAL_INPUT));
-    x -= dx * 8;
-    y += dy * 2;
+    x -= dx * 10;
+    y += dy * 3.5;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::VOLTAGE_OUTPUT));
     x += dx * 2;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::FLIPPED_OUTPUT));
@@ -664,74 +745,116 @@ struct TapeMachineModuleWidget : ModuleWidget
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::MAX_OUTPUT));
     x += dx * 2;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::RANDOM_PULSE_OUTPUT));
-    x -= dx * 9;
-    y += dy * 4;
+    x -= dx * 12;
+    y += dy * 1.5;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 15));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 14));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 13));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 12));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 11));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 10));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 9));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 8));
-    x -= dx * 17.5;
+    x -= dx * 15.75;
     y += dy * 1.5;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 15));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 14));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 13));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 12));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 11));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 10));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 9));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 8));
-    x -= dx * 17.5;
+    x -= dx * 15.75;
     y += dy * 2;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 7));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 6));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 5));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 4));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 3));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 2));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 1));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addChild(createLightCentered<MediumLight<RedLight>>(Vec(x, y), module, TapeMachineModule::BIT_LIGHT + 0));
-    x -= dx * 17.5;
+    x -= dx * 15.75;
     y += dy * 1.5;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 7));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 6));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 5));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 4));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 3));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 2));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 1));
-    x += dx * 2.5;
+    x += dx * 2.25;
     addOutput(createOutputCentered<BitPort>(Vec(x, y), module, TapeMachineModule::PULSE_OUTPUT + 0));
+    x -= dx * 15.75;
+    y += dy * 2.0;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 0));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 0));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 1));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 1));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 2));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 2));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 3));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 3));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 4));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 4));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 5));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 5));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 6));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 6));
+    y -= dy * 1.5;
+    x += dx * 2.25;
+    addParam(createParamCentered<CKSSThreeHorizontal>(Vec(x, y), module, TapeMachineModule::GRID_LOGIC_PARAM + 7));
+    y += dy * 1.5;
+    addOutput(createOutputCentered<BitPort>(Vec(x, y + 2.0), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 7));
+    y -= dy * 1.5;
+    x -= dx * 16.0;
   }
 
   void appendContextMenu(Menu *menu) override
