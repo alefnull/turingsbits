@@ -93,6 +93,7 @@ struct TapeMachineModule : Module
 
   size_t bit_pulse_mode = 1;
   size_t random_pulse_mode = 1;
+  size_t logic_pulse_mode = 1;
   std::vector<std::string> mode_labels = {"trigger", "clock", "hold"};
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
@@ -190,6 +191,7 @@ struct TapeMachineModule : Module
     json_t *rootJ = json_object();
     json_object_set_new(rootJ, "bit_pulse_mode", json_integer(bit_pulse_mode));
     json_object_set_new(rootJ, "random_pulse_mode", json_integer(random_pulse_mode));
+    json_object_set_new(rootJ, "logic pulse mode", json_integer(logic_pulse_mode));
     json_object_set_new(rootJ, "voltage_range", voltage_range.dataToJson());
     json_object_set_new(rootJ, "flipped_voltage_range", flipped_voltage_range.dataToJson());
     json_object_set_new(rootJ, "min_voltage_range", min_voltage_range.dataToJson());
@@ -224,6 +226,11 @@ struct TapeMachineModule : Module
     if (randomModeJ)
     {
       random_pulse_mode = json_integer_value(randomModeJ);
+    }
+    json_t *logicModeJ = json_object_get(rootJ, "logic pulse mode");
+    if (logicModeJ)
+    {
+      logic_pulse_mode = json_integer_value(logicModeJ);
     }
     json_t *vRangeJ = json_object_get(rootJ, "voltage_range");
     if (vRangeJ)
@@ -334,6 +341,16 @@ struct TapeMachineModule : Module
   void setRandomMode(size_t mode)
   {
     random_pulse_mode = mode;
+  }
+
+  size_t getLogicMode()
+  {
+    return logic_pulse_mode;
+  }
+
+  void setLogicMode(size_t mode)
+  {
+    logic_pulse_mode = mode;
   }
 
   const int PARAM_INTERVAL = 64;
@@ -675,7 +692,7 @@ struct TapeMachineModule : Module
 
         
         float out = 0.f;
-        switch (bit_pulse_mode) {
+        switch (logic_pulse_mode) {
             case 0: 
                 
                 if (logic_result && new_clock) {
@@ -805,6 +822,9 @@ struct TapeMachineModuleWidget : ModuleWidget
     menu->addChild(createIndexSubmenuItem("random pulse mode", module->mode_labels, [=]
                                           { return module->getRandomMode(); }, [=](size_t mode)
                                           { module->setRandomMode(mode); }));
+    menu->addChild(createIndexSubmenuItem("logic pulse mode", module->mode_labels, [=]
+                                          { return module->getLogicMode(); }, [=](size_t mode)
+                                          { module->setLogicMode(mode); }));
     menu->addChild(new MenuSeparator());
     module->voltage_range.addMenu(module, menu, "voltage range");
     module->flipped_voltage_range.addMenu(module, menu, "flipped voltage range");
