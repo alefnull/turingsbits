@@ -44,6 +44,7 @@ struct TapeMachineModule : Module
     CLEAR_LIGHT,
     SET_LIGHT,
     ENUMS(GRID_LOGIC_LIGHT, 8),
+    RANDOM_PULSE_LIGHT,
     NUM_LIGHTS
   };
   enum LogicMode
@@ -637,15 +638,19 @@ struct TapeMachineModule : Module
     {
     case 0: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(random_pulse.process(args.sampleTime) ? 10.f : 0.f);
+      lights[RANDOM_PULSE_LIGHT].setBrightness(random_pulse.process(args.sampleTime) ? 1.f : 0.f);
       break;
     case 1: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
+      lights[RANDOM_PULSE_LIGHT].setBrightness((bit_toggled && clock_input > 0.5f) ? 1.f : 0.f);
       break;
     case 2: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? 10.f : 0.f);
+      lights[RANDOM_PULSE_LIGHT].setBrightness(bit_toggled ? 1.f : 0.f);
       break;
     default: 
       outputs[RANDOM_PULSE_OUTPUT].setVoltage(bit_toggled ? clock_input : 0.f);
+      lights[RANDOM_PULSE_LIGHT].setBrightness((bit_toggled && clock_input > 0.5f) ? 1.f : 0.f);
       break;
     }
 
@@ -761,6 +766,7 @@ struct TapeMachineModuleWidget : ModuleWidget
 
 		addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
 		addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
+		addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(79.439, 70.539)), module, TapeMachineModule::RANDOM_PULSE_LIGHT));
 		addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
 		addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::BIT_LIGHT + 14));
 		addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::BIT_LIGHT + 13));
