@@ -2,10 +2,8 @@
 #include <rack.hpp>
 using namespace ::rack;
 
-// Declare the Plugin, defined in plugin.cpp
 extern Plugin *pluginInstance;
 
-// Declare each Model, defined in each module source file
 extern Model *modelTapemachine;
 
 struct BitKnob : RoundBlackKnob
@@ -23,6 +21,15 @@ struct LargeBitKnob : RoundLargeBlackKnob
     {
         setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/largebitknob_fg.svg")));
         bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/largebitknob_bg.svg")));
+    }
+};
+
+struct HugeBitKnob : RoundHugeBlackKnob
+{
+    HugeBitKnob()
+    {
+        setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/hugebitknob_fg.svg")));
+        bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/hugebitknob_bg.svg")));
     }
 };
 
