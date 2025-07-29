@@ -42,6 +42,15 @@ struct SmallBitKnob : RoundSmallBlackKnob
     }
 };
 
+struct BitTrimpot : Trimpot
+{
+    BitTrimpot()
+    {
+        setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/bittrimpot_fg.svg")));
+        bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/bittrimpot_bg.svg")));
+    }
+};
+
 struct BitPort : SvgPort
 {
     BitPort()
