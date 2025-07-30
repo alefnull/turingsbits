@@ -399,8 +399,6 @@ struct TapeMachineModule : Module
   int check_params = 0;
   void processParams() {
     prob = params[PROBABILITY_PARAM].getValue();
-    clear = params[CLEAR_PARAM].getValue();
-    set = params[SET_PARAM].getValue();
     shift_amt = params[SHIFT_PARAM].getValue();
     rtl = params[DIR_PARAM].getValue();
     dual = params[DUAL_PARAM].getValue();
@@ -480,6 +478,12 @@ struct TapeMachineModule : Module
       check_params = 0;
       processParams();
     }
+
+    clear = false;
+    set = false;
+
+    clear = params[CLEAR_PARAM].getValue();
+    set = params[SET_PARAM].getValue();
 
     float clock_input = inputs[CLOCK_INPUT].getVoltage();
     bool new_clock = clock.process(clock_input);
