@@ -94,6 +94,8 @@ struct TapeMachineModule : Module
 
   dsp::SchmittTrigger clock;
   dsp::SchmittTrigger dir_trigger;
+  dsp::SchmittTrigger reset_a_trigger;
+  dsp::SchmittTrigger reset_b_trigger;
 
   size_t bit_pulse_mode = 1;
   size_t random_pulse_mode = 1;
@@ -471,9 +473,6 @@ struct TapeMachineModule : Module
   }
 
   void process(const ProcessArgs& args) override {
-    clear = false;
-    set = false;
-
     if (++check_params > PARAM_INTERVAL) {
       check_params = 0;
       processParams();
@@ -489,15 +488,17 @@ struct TapeMachineModule : Module
     bool new_clock = clock.process(clock_input);
 
     if (dual) {
-      if (inputs[RESET_A_INPUT].isConnected() && inputs[RESET_A_INPUT].getVoltage() > 5.f) {
-        should_reset_tape_a = true;
+      if (reset_a_trigger.process(inputs[RESET_A_INPUT].getVoltage())) {
+      should_reset_tape_a = true;
       }
-      if (inputs[RESET_B_INPUT].isConnected() && inputs[RESET_B_INPUT].getVoltage() > 5.f) {
-        should_reset_tape_b = true;
+      if (reset_b_trigger.process(inputs[RESET_B_INPUT].getVoltage())) {
+      should_reset_tape_b = true;
       }
     }
-    else if (inputs[RESET_A_INPUT].isConnected() && inputs[RESET_A_INPUT].getVoltage() > 5.f) {
+    else {
+      if (reset_a_trigger.process(inputs[RESET_A_INPUT].getVoltage())) {
       should_reset_tape = true;
+      }
     }
 
     if (inputs[SHIFT_INPUT].isConnected()) {
@@ -524,15 +525,15 @@ struct TapeMachineModule : Module
       noise_a = random::uniform();
       noise_b = random::uniform();
 
-      if (should_reset_tape) {
+      if (should_reset_tape || inputs[RESET_A_INPUT].getVoltage() > 5.f) {
         resetTape();
         should_reset_tape = false;
       }
-      else if (should_reset_tape_a) {
+      if (should_reset_tape_a || (dual && inputs[RESET_A_INPUT].getVoltage() > 5.f)) {
         resetTapeA();
         should_reset_tape_a = false;
       }
-      else if (should_reset_tape_b) {
+      if (should_reset_tape_b || (dual && inputs[RESET_B_INPUT].getVoltage() > 5.f)) {
         resetTapeB();
         should_reset_tape_b = false;
       }
@@ -702,9 +703,9 @@ struct TapeMachineModule : Module
       switch (logic_pulse_mode) {
         case 0:
           if (logic_result && new_clock) {
-            bit_pulses[16 + i].trigger(0.01f);
+            bit_pulses[15 - i].trigger(0.01f);
           }
-          out = bit_pulses[16 + i].process(args.sampleTime) ? 10.f : 0.f;
+          out = bit_pulses[15 - i].process(args.sampleTime) ? 10.f : 0.f;
           break;
         case 1:
         default:
