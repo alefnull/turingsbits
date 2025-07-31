@@ -735,7 +735,7 @@ struct TapeMachineModuleWidget : ModuleWidget
 
     addParam(createParamCentered<TL1105>(mm2px(Vec(25.625, 25.412)), module, TapeMachineModule::SET_PARAM));
     addParam(createParamCentered<TL1105>(mm2px(Vec(35.904, 25.412)), module, TapeMachineModule::CLEAR_PARAM));
-    addParam(createParamCentered<SmallBitKnob>(mm2px(Vec(75.148, 28.625)), module, TapeMachineModule::SHIFT_PARAM));
+    addParam(createParamCentered<BitTrimpot>(mm2px(Vec(80.148, 25.412)), module, TapeMachineModule::SHIFT_PARAM));
     addParam(createParamCentered<HugeBitKnob>(mm2px(Vec(55.88, 39.432)), module, TapeMachineModule::PROBABILITY_PARAM));
     addParam(createParamCentered<CKSS>(mm2px(Vec(75.148, 45.858)), module, TapeMachineModule::DIR_PARAM));
     addParam(createParamCentered<CKSS>(mm2px(Vec(85.148, 45.858)), module, TapeMachineModule::DUAL_PARAM));
@@ -750,7 +750,7 @@ struct TapeMachineModuleWidget : ModuleWidget
 
     addInput(createInputCentered<BitPort>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 28.625)), module, TapeMachineModule::SHIFT_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(80.148, 32.838)), module, TapeMachineModule::SHIFT_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(30.7645, 45.858)), module, TapeMachineModule::CLOCK_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(25.625, 54.62)), module, TapeMachineModule::RESET_A_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 54.62)), module, TapeMachineModule::RESET_B_INPUT));
