@@ -25,6 +25,7 @@ struct TapeMachineModule : Module
     DUAL_INPUT,
     RESET_A_INPUT,
     RESET_B_INPUT,
+    PROB_INPUT,
     NUM_INPUTS
   };
   enum Outputs
@@ -152,6 +153,8 @@ struct TapeMachineModule : Module
     getInputInfo(Inputs::RESET_A_INPUT)->description = "Resets 'Main/A' tape to 0 on rising edge. Expects 0-10V gate signal.";
     configInput(Inputs::RESET_B_INPUT, "Reset B tape");
     getInputInfo(Inputs::RESET_B_INPUT)->description = "Resets 'B' tape to 0 on rising edge. Expects 0-10V gate signal.";
+    configInput(Inputs::PROB_INPUT, "Probability");
+    getInputInfo(Inputs::PROB_INPUT)->description = "Sets the probability of a bit being toggled on each clock pulse. Expects 0-10V (0-100%).";
     for (int i = 0; i < 8; i++) {
       configSwitch(Params::GRID_LOGIC_PARAM + i, 0, 2, 0, "Column " + std::to_string(i + 1) + " logic", { "AND", "OR", "XOR" });
       configOutput(Outputs::GRID_LOGIC_OUTPUT + i, "Column " + std::to_string(i + 1) + " logic");
@@ -478,6 +481,12 @@ struct TapeMachineModule : Module
       processParams();
     }
 
+    if (inputs[PROB_INPUT].isConnected()) {
+      prob = inputs[PROB_INPUT].getVoltage() / 10.f;
+      prob = std::clamp(prob, 0.f, 1.f);
+      getParamQuantity(PROBABILITY_PARAM)->setValue(prob);
+    }
+
     clear = false;
     set = false;
 
@@ -756,6 +765,7 @@ struct TapeMachineModuleWidget : ModuleWidget
     addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 54.62)), module, TapeMachineModule::RESET_B_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(75.148, 54.62)), module, TapeMachineModule::DIR_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 54.62)), module, TapeMachineModule::DUAL_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(55.88, 59.432)), module, TapeMachineModule::PROB_INPUT));
 
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
