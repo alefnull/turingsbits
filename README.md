@@ -11,4 +11,4 @@ a Turing Machine clone with some extra bits. clock input shifts the bits of a 16
 
 you can now also switch the direction to shift bits with the "direction" switch and input, as well as toggle "dual mode" with its own switch and input.
 
-when in dual mode, the full 16-bit tape is split in two and treated as two individual 8-bit tapes, each with their own RNG for toggling bits according to the probability knob.
+when in dual mode, the full 16-bit tape is split in two and treated as two individual 8-bit tapes, each with their own RNG for toggling bits according to the probability knob. both individual tapes can also be reset to 0 with the two "Reset" inputs below the "Clock" input. when not in dual mode, only the leftmost "Reset" input (labeled 'Main/A' in tooltip) is used to reset the whole tape.
