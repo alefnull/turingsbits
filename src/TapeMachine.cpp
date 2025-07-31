@@ -38,6 +38,8 @@ struct TapeMachineModule : Module
     RANDOM_PULSE_A_OUTPUT,
     RANDOM_PULSE_B_OUTPUT,
     ENUMS(GRID_LOGIC_OUTPUT, 8),
+    TAPE_A_OUTPUT,
+    TAPE_B_OUTPUT,
     NUM_OUTPUTS
   };
   enum Lights
@@ -92,6 +94,8 @@ struct TapeMachineModule : Module
   CVRange flipped_voltage_range;
   CVRange min_voltage_range;
   CVRange max_voltage_range;
+  CVRange tape_a_range;
+  CVRange tape_b_range;
 
   dsp::SchmittTrigger clock;
   dsp::SchmittTrigger dir_trigger;
@@ -133,16 +137,20 @@ struct TapeMachineModule : Module
     getInputInfo(Inputs::SET_INPUT)->description = "Sets first bit on each clock pulse while input gate is high. Expects 0-10V.";
     configInput(Inputs::SHIFT_INPUT, "Shift");
     getInputInfo(Inputs::SHIFT_INPUT)->description = "How many bits to shift with each clock pulse. Expects 0-10V (1-15 bits).";
-    configOutput(Outputs::VOLTAGE_OUTPUT, "Voltage");
-    getOutputInfo(Outputs::VOLTAGE_OUTPUT)->description = "Default range +/- 1V. Adjust in context menu.";
+    configOutput(Outputs::VOLTAGE_OUTPUT, "Main voltage");
+    getOutputInfo(Outputs::VOLTAGE_OUTPUT)->description = "Current value of the full 16-bit tape. Default range +/- 1V. Adjust in context menu.";
+    configOutput(Outputs::TAPE_A_OUTPUT, "Tape (A) voltage");
+    getOutputInfo(Outputs::TAPE_A_OUTPUT)->description = "Current value of the 8-bit 'Main/A' tape. Default range +/- 1V. Adjust in context menu.";
+    configOutput(Outputs::TAPE_B_OUTPUT, "Tape (B) voltage");
+    getOutputInfo(Outputs::TAPE_B_OUTPUT)->description = "Current value of the 8-bit 'B' tape. Default range +/- 1V. Adjust in context menu.";
     configOutput(Outputs::FLIPPED_OUTPUT, "Flipped");
-    getOutputInfo(Outputs::FLIPPED_OUTPUT)->description = "Default range +/- 1V. Adjust in context menu.";
+    getOutputInfo(Outputs::FLIPPED_OUTPUT)->description = "Flipped tape value. Default range +/- 1V. Adjust in context menu.";
     configOutput(Outputs::MIN_OUTPUT, "Minimum");
-    getOutputInfo(Outputs::MIN_OUTPUT)->description = "Default range +/- 1V. Adjust in context menu.";
+    getOutputInfo(Outputs::MIN_OUTPUT)->description = "Minimum of the Main and Flipped tape values. Default range +/- 1V. Adjust in context menu.";
     configOutput(Outputs::MAX_OUTPUT, "Maximum");
-    getOutputInfo(Outputs::MAX_OUTPUT)->description = "Default range +/- 1V. Adjust in context menu.";
+    getOutputInfo(Outputs::MAX_OUTPUT)->description = "Maximum of the Main and Flipped tape values. Default range +/- 1V. Adjust in context menu.";
     configOutput(Outputs::RANDOM_PULSE_A_OUTPUT, "Random Pulse (Main/A)");
-    getOutputInfo(Outputs::RANDOM_PULSE_A_OUTPUT)->description = "outputs pulse signal (set mode in context menu) when a bit is toggled. (Main/A)";
+    getOutputInfo(Outputs::RANDOM_PULSE_A_OUTPUT)->description = "Outputs pulse signal (set mode in context menu) when a bit is toggled. (Main/A)";
     configOutput(Outputs::RANDOM_PULSE_B_OUTPUT, "Random Pulse (B)");
     getOutputInfo(Outputs::RANDOM_PULSE_B_OUTPUT)->description = "Outputs pulse signal (set mode in context menu) when a bit is toggled. (B)";
     configSwitch(Params::DIR_PARAM, 0, 1, 0, "Direction", { "Left-to-Right", "Right-to-Left" });
@@ -176,6 +184,14 @@ struct TapeMachineModule : Module
     voltage_range.cv_b = 1;
     voltage_range.updateInternal();
 
+    tape_a_range.cv_a = -1;
+    tape_a_range.cv_b = 1;
+    tape_a_range.updateInternal();
+
+    tape_b_range.cv_a = -1;
+    tape_b_range.cv_b = 1;
+    tape_b_range.updateInternal();
+
     flipped_voltage_range.cv_a = -1;
     flipped_voltage_range.cv_b = 1;
     flipped_voltage_range.updateInternal();
@@ -205,6 +221,8 @@ struct TapeMachineModule : Module
     json_object_set_new(rootJ, "random_pulse_mode", json_integer(random_pulse_mode));
     json_object_set_new(rootJ, "logic pulse mode", json_integer(logic_pulse_mode));
     json_object_set_new(rootJ, "voltage_range", voltage_range.dataToJson());
+    json_object_set_new(rootJ, "tape_a_range", tape_a_range.dataToJson());
+    json_object_set_new(rootJ, "tape_b_range", tape_b_range.dataToJson());
     json_object_set_new(rootJ, "flipped_voltage_range", flipped_voltage_range.dataToJson());
     json_object_set_new(rootJ, "min_voltage_range", min_voltage_range.dataToJson());
     json_object_set_new(rootJ, "max_voltage_range", max_voltage_range.dataToJson());
@@ -243,6 +261,14 @@ struct TapeMachineModule : Module
     json_t* vRangeJ = json_object_get(rootJ, "voltage_range");
     if (vRangeJ) {
       voltage_range.dataFromJson(vRangeJ);
+    }
+    json_t* tapeARangeJ = json_object_get(rootJ, "tape_a_range");
+    if (tapeARangeJ) {
+      tape_a_range.dataFromJson(tapeARangeJ);
+    }
+    json_t* tapeBRangeJ = json_object_get(rootJ, "tape_b_range");
+    if (tapeBRangeJ) {
+      tape_b_range.dataFromJson(tapeBRangeJ);
     }
     json_t* fRangeJ = json_object_get(rootJ, "flipped_voltage_range");
     if (fRangeJ) {
@@ -622,9 +648,13 @@ struct TapeMachineModule : Module
 
     uint16_t flipped_tape = (~tape);
     float voltage = voltage_range.map(tape / 65535.f);
+    float tape_a_voltage = tape_a_range.map(tapeA / 255.f);
+    float tape_b_voltage = tape_b_range.map(tapeB / 255.f);
     float flipped_voltage = flipped_voltage_range.map(flipped_tape / 65535.f);
 
     outputs[VOLTAGE_OUTPUT].setVoltage(voltage);
+    outputs[TAPE_A_OUTPUT].setVoltage(tape_a_voltage);
+    outputs[TAPE_B_OUTPUT].setVoltage(tape_b_voltage);
     outputs[FLIPPED_OUTPUT].setVoltage(flipped_voltage);
 
     float min_voltage = flipped_tape ^ ((tape ^ flipped_tape) & -(tape < flipped_tape));
@@ -767,12 +797,20 @@ struct TapeMachineModuleWidget : ModuleWidget
     addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 54.62)), module, TapeMachineModule::DUAL_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(55.88, 59.432)), module, TapeMachineModule::PROB_INPUT));
 
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
+    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
+    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
+    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
+    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
+    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
+    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483-12.046, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::TAPE_A_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::TAPE_B_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529+12.046, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576+12.046, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622+12.046, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 15));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 14));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 13));
@@ -800,8 +838,10 @@ struct TapeMachineModuleWidget : ModuleWidget
 
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
+    // addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
+    // addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::BIT_LIGHT + 14));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::BIT_LIGHT + 13));
@@ -838,6 +878,8 @@ struct TapeMachineModuleWidget : ModuleWidget
     menu->addChild(createIndexSubmenuItem("Logic pulse mode", module->mode_labels, [=] { return module->getLogicMode(); }, [=](size_t mode) { module->setLogicMode(mode); }));
     menu->addChild(new MenuSeparator());
     module->voltage_range.addMenu(module, menu, "Voltage range");
+    module->tape_a_range.addMenu(module, menu, "Tape A voltage range");
+    module->tape_b_range.addMenu(module, menu, "Tape B voltage range");
     module->flipped_voltage_range.addMenu(module, menu, "Flipped voltage range");
     module->min_voltage_range.addMenu(module, menu, "Min voltage range");
     module->max_voltage_range.addMenu(module, menu, "Max voltage range");
