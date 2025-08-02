@@ -52,6 +52,12 @@ struct TapeMachineModule : Module
     RANDOM_PULSE_B_LIGHT,
     NUM_LIGHTS
   };
+  enum PulseMode
+  {
+    TRIGGER,
+    CLOCK,
+    HOLD
+  };
   enum LogicMode
   {
     AND,
@@ -59,14 +65,13 @@ struct TapeMachineModule : Module
     XOR
   };
 
-  bool dual = false;
   uint16_t tape = 0b0;
   uint8_t tapeA = 0, tapeB = 0;
+  bool dual = false;
   bool last_dual = false;
+
   bool bit_toggled_a = false;
   bool bit_toggled_b = false;
-  dsp::PulseGenerator random_pulse_a;
-  dsp::PulseGenerator random_pulse_b;
   uint16_t mask[16] = {
       0b0000000000000001,
       0b0000000000000010,
@@ -84,12 +89,11 @@ struct TapeMachineModule : Module
       0b0010000000000000,
       0b0100000000000000,
       0b1000000000000000 };
+
   float prob = 0.5;
   float noise_a = 0.f;
   float noise_b = 0.f;
-  bool clear = false;
-  bool set = false;
-  int shift_amt = 1;
+
   CVRange voltage_range;
   CVRange flipped_voltage_range;
   CVRange min_voltage_range;
@@ -102,10 +106,14 @@ struct TapeMachineModule : Module
   dsp::SchmittTrigger reset_a_trigger;
   dsp::SchmittTrigger reset_b_trigger;
 
-  size_t bit_pulse_mode = 1;
-  size_t random_pulse_mode = 1;
-  size_t logic_pulse_mode = 1;
-  std::vector<std::string> mode_labels = { "Trigger", "Clock", "Hold" };
+  dsp::PulseGenerator random_pulse_a;
+  dsp::PulseGenerator random_pulse_b;
+
+  size_t bit_pulse_mode = PulseMode::CLOCK;
+  size_t random_pulse_mode = PulseMode::CLOCK;
+  size_t logic_pulse_mode = PulseMode::CLOCK;
+  std::vector<std::string> main_mode_labels = { "Shift", "Stroll", "Cascade", "Flicker" };
+  std::vector<std::string> pulse_mode_labels = { "Trigger", "Clock", "Hold" };
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
   LogicMode grid_logic_modes[8] = { LogicMode::AND };
@@ -114,6 +122,9 @@ struct TapeMachineModule : Module
   bool should_reset_tape_a = false;
   bool should_reset_tape_b = false;
 
+  bool clear = false;
+  bool set = false;
+  int shift_amt = 1;
   bool rtl = false;
 
   TapeMachineModule() {
@@ -717,9 +728,7 @@ struct TapeMachineModule : Module
         break;
     }
 
-
     for (int i = 0; i < 8; i++) {
-
       bool bitA, bitB;
       if (dual) {
         bitA = ((tapeA >> (7 - i)) & 0x1) != 0;
@@ -737,25 +746,24 @@ struct TapeMachineModule : Module
         case LogicMode::XOR: logic_result = bitA != bitB; break;
       }
 
-
-      float out = 0.f;
+      float logic_out = 0.f;
       switch (logic_pulse_mode) {
         case 0:
           if (logic_result && new_clock) {
             bit_pulses[15 - i].trigger(0.01f);
           }
-          out = bit_pulses[15 - i].process(args.sampleTime) ? 10.f : 0.f;
+          logic_out = bit_pulses[15 - i].process(args.sampleTime) ? 10.f : 0.f;
           break;
         case 1:
         default:
-          out = logic_result ? clock_input : 0.f;
+          logic_out = logic_result ? clock_input : 0.f;
           break;
         case 2:
-          out = logic_result ? 10.f : 0.f;
+          logic_out = logic_result ? 10.f : 0.f;
           break;
       }
-      outputs[GRID_LOGIC_OUTPUT + i].setVoltage(out);
-      lights[GRID_LOGIC_LIGHT + i].setBrightness(out);
+      outputs[GRID_LOGIC_OUTPUT + i].setVoltage(logic_out);
+      lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_out);
     }
   }
 };
@@ -797,12 +805,6 @@ struct TapeMachineModuleWidget : ModuleWidget
     addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 54.62)), module, TapeMachineModule::DUAL_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(55.88, 59.432)), module, TapeMachineModule::PROB_INPUT));
 
-    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
-    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
-    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
-    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
-    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
-    // addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483-12.046, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::TAPE_A_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::TAPE_B_OUTPUT));
@@ -838,8 +840,6 @@ struct TapeMachineModuleWidget : ModuleWidget
 
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
-    // addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
-    // addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
@@ -873,9 +873,9 @@ struct TapeMachineModuleWidget : ModuleWidget
     assert(module);
 
     menu->addChild(new MenuSeparator());
-    menu->addChild(createIndexSubmenuItem("Bit pulse mode", module->mode_labels, [=] { return module->getBitMode(); }, [=](size_t mode) { module->setBitMode(mode); }));
-    menu->addChild(createIndexSubmenuItem("Random pulse mode", module->mode_labels, [=] { return module->getRandomMode(); }, [=](size_t mode) { module->setRandomMode(mode); }));
-    menu->addChild(createIndexSubmenuItem("Logic pulse mode", module->mode_labels, [=] { return module->getLogicMode(); }, [=](size_t mode) { module->setLogicMode(mode); }));
+    menu->addChild(createIndexSubmenuItem("Bit pulse mode", module->pulse_mode_labels, [=] { return module->getBitMode(); }, [=](size_t mode) { module->setBitMode(mode); }));
+    menu->addChild(createIndexSubmenuItem("Random pulse mode", module->pulse_mode_labels, [=] { return module->getRandomMode(); }, [=](size_t mode) { module->setRandomMode(mode); }));
+    menu->addChild(createIndexSubmenuItem("Logic pulse mode", module->pulse_mode_labels, [=] { return module->getLogicMode(); }, [=](size_t mode) { module->setLogicMode(mode); }));
     menu->addChild(new MenuSeparator());
     module->voltage_range.addMenu(module, menu, "Voltage range");
     module->tape_a_range.addMenu(module, menu, "Tape A voltage range");
