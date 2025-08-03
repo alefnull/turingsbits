@@ -772,13 +772,13 @@ struct TapeMachineModuleWidget : ModuleWidget
 {
   TapeMachineModuleWidget(TapeMachineModule* module) {
     setModule(module);
-    SvgPanel* panel = createPanel(asset::plugin(pluginInstance, "res/tape-machine.svg"));
+    SvgPanel* panel = createPanel(asset::plugin(pluginInstance, "res/tape-machine.svg"), asset::plugin(pluginInstance, "res/tape-machine-dark.svg"));
     setPanel(panel);
 
-    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<ThemedScrew>(Vec(RACK_GRID_WIDTH, 0)));
+    addChild(createWidget<ThemedScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+    addChild(createWidget<ThemedScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<ThemedScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
     addParam(createParamCentered<TL1105>(mm2px(Vec(25.625, 25.412)), module, TapeMachineModule::SET_PARAM));
     addParam(createParamCentered<TL1105>(mm2px(Vec(35.904, 25.412)), module, TapeMachineModule::CLEAR_PARAM));
