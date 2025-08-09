@@ -33,3 +33,4 @@ dist/
 *.exe
 *.out
 *.app
+output.txt

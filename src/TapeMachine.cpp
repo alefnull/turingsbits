@@ -535,15 +535,15 @@ struct TapeMachineModule : Module
 
     if (dual) {
       if (reset_a_trigger.process(inputs[RESET_A_INPUT].getVoltage())) {
-      should_reset_tape_a = true;
+        should_reset_tape_a = true;
       }
       if (reset_b_trigger.process(inputs[RESET_B_INPUT].getVoltage())) {
-      should_reset_tape_b = true;
+        should_reset_tape_b = true;
       }
     }
     else {
       if (reset_a_trigger.process(inputs[RESET_A_INPUT].getVoltage())) {
-      should_reset_tape = true;
+        should_reset_tape = true;
       }
     }
 
@@ -805,14 +805,14 @@ struct TapeMachineModuleWidget : ModuleWidget
     addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 54.62)), module, TapeMachineModule::DUAL_INPUT));
     addInput(createInputCentered<BitPort>(mm2px(Vec(55.88, 59.432)), module, TapeMachineModule::PROB_INPUT));
 
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483-12.046, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.437, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::TAPE_A_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::TAPE_B_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529+12.046, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576+12.046, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622+12.046, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.575, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.668, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.714, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.761, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 15));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 14));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 13));
@@ -840,8 +840,8 @@ struct TapeMachineModuleWidget : ModuleWidget
 
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715+12.046, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(97.761, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::BIT_LIGHT + 14));
     addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::BIT_LIGHT + 13));
@@ -886,4 +886,4 @@ struct TapeMachineModuleWidget : ModuleWidget
   }
 };
 
-Model* modelTapemachine = createModel<TapeMachineModule, TapeMachineModuleWidget>("tape-machine");
+Model* modelTapeMachine = createModel<TapeMachineModule, TapeMachineModuleWidget>("tape-machine");

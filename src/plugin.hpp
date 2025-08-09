@@ -4,7 +4,7 @@ using namespace ::rack;
 
 extern Plugin *pluginInstance;
 
-extern Model *modelTapemachine;
+extern Model *modelTapeMachine;
 
 struct BitKnob : RoundBlackKnob
 {
