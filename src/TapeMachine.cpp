@@ -50,6 +50,7 @@ struct TapeMachineModule : Module
     ENUMS(GRID_LOGIC_LIGHT, 8),
     RANDOM_PULSE_A_LIGHT,
     RANDOM_PULSE_B_LIGHT,
+    ENUMS(POSITION_LIGHT, 16),
     NUM_LIGHTS
   };
   enum PulseMode
@@ -58,7 +59,7 @@ struct TapeMachineModule : Module
     CLOCK,
     HOLD
   };
-  enum LogicMode
+  enum LogicOp
   {
     AND,
     OR,
@@ -116,7 +117,7 @@ struct TapeMachineModule : Module
   std::vector<std::string> pulse_mode_labels = { "Trigger", "Clock", "Hold" };
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
-  LogicMode grid_logic_modes[8] = { LogicMode::AND };
+  LogicOp grid_logic_modes[8] = { LogicOp::AND };
 
   bool should_reset_tape = false;
   bool should_reset_tape_a = false;
@@ -219,7 +220,7 @@ struct TapeMachineModule : Module
       bit_pulses[i].reset();
       light_pulses[i].reset();
       if (i < 8) {
-        params[Params::GRID_LOGIC_PARAM + i].setValue(LogicMode::AND);
+        params[Params::GRID_LOGIC_PARAM + i].setValue(LogicOp::AND);
         outputs[Outputs::GRID_LOGIC_OUTPUT + i].setVoltage(0.f);
         lights[Lights::GRID_LOGIC_LIGHT + i].setBrightness(0.f);
       }
@@ -447,16 +448,16 @@ struct TapeMachineModule : Module
 
     for (int i = 0; i < 8; i++) {
       int mode = (int)params[GRID_LOGIC_PARAM + i].getValue();
-      if (mode < 0 || mode > 2) mode = LogicMode::AND;
+      if (mode < 0 || mode > 2) mode = LogicOp::AND;
       switch (mode) {
-        case LogicMode::AND:
-          grid_logic_modes[i] = LogicMode::AND;
+        case LogicOp::AND:
+          grid_logic_modes[i] = LogicOp::AND;
           break;
-        case LogicMode::OR:
-          grid_logic_modes[i] = LogicMode::OR;
+        case LogicOp::OR:
+          grid_logic_modes[i] = LogicOp::OR;
           break;
-        case LogicMode::XOR:
-          grid_logic_modes[i] = LogicMode::XOR;
+        case LogicOp::XOR:
+          grid_logic_modes[i] = LogicOp::XOR;
           break;
       }
     }
@@ -677,7 +678,7 @@ struct TapeMachineModule : Module
     outputs[MAX_OUTPUT].setVoltage(max_voltage);
 
     switch (bit_pulse_mode) {
-      case 0:
+      case PulseMode::TRIGGER:
         for (int i = 0; i < 16; i++) {
           if (new_clock && ((tape & mask[i]) != 0)) {
             bit_pulses[i].trigger(0.01f);
@@ -691,14 +692,14 @@ struct TapeMachineModule : Module
           lights[BIT_LIGHT + i].setBrightness((((tape & mask[i]) != 0) && lp) ? 1.f : 0.f);
         }
         break;
-      case 1:
+      case PulseMode::CLOCK:
       default:
         for (int i = 0; i < 16; i++) {
           outputs[PULSE_OUTPUT + i].setVoltage((((tape & mask[i]) != 0) && clock_input > 0.5f) ? clock_input : 0.f);
           lights[BIT_LIGHT + i].setBrightness((((tape & mask[i]) != 0) && clock_input > 0.5f) ? 1.f : 0.f);
         }
         break;
-      case 2:
+      case PulseMode::HOLD:
         for (int i = 0; i < 16; i++) {
           outputs[PULSE_OUTPUT + i].setVoltage(((tape & mask[i]) != 0) ? 10.f : 0.f);
           lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) != 0) ? 1.f : 0.f);
@@ -707,20 +708,20 @@ struct TapeMachineModule : Module
     }
 
     switch (random_pulse_mode) {
-      case 0:
+      case PulseMode::TRIGGER:
         outputs[RANDOM_PULSE_A_OUTPUT].setVoltage(random_pulse_a.process(args.sampleTime) ? 10.f : 0.f);
         lights[RANDOM_PULSE_A_LIGHT].setBrightness(random_pulse_a.process(args.sampleTime) ? 1.f : 0.f);
         outputs[RANDOM_PULSE_B_OUTPUT].setVoltage(random_pulse_b.process(args.sampleTime) ? 10.f : 0.f);
         lights[RANDOM_PULSE_B_LIGHT].setBrightness(random_pulse_b.process(args.sampleTime) ? 1.f : 0.f);
         break;
-      case 1:
+      case PulseMode::CLOCK:
       default:
         outputs[RANDOM_PULSE_A_OUTPUT].setVoltage(bit_toggled_a ? clock_input : 0.f);
         lights[RANDOM_PULSE_A_LIGHT].setBrightness((bit_toggled_a && clock_input > 0.5f) ? 1.f : 0.f);
         outputs[RANDOM_PULSE_B_OUTPUT].setVoltage(bit_toggled_b ? clock_input : 0.f);
         lights[RANDOM_PULSE_B_LIGHT].setBrightness((bit_toggled_b && clock_input > 0.5f) ? 1.f : 0.f);
         break;
-      case 2:
+      case PulseMode::HOLD:
         outputs[RANDOM_PULSE_A_OUTPUT].setVoltage(bit_toggled_a ? 10.f : 0.f);
         lights[RANDOM_PULSE_A_LIGHT].setBrightness(bit_toggled_a ? 1.f : 0.f);
         outputs[RANDOM_PULSE_B_OUTPUT].setVoltage(bit_toggled_b ? 10.f : 0.f);
@@ -728,7 +729,8 @@ struct TapeMachineModule : Module
         break;
     }
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 16; i++) {
+      if (i < 8) {
       bool bitA, bitB;
       if (dual) {
         bitA = ((tapeA >> (7 - i)) & 0x1) != 0;
@@ -741,29 +743,40 @@ struct TapeMachineModule : Module
 
       bool logic_result = false;
       switch (grid_logic_modes[i]) {
-        case LogicMode::AND: logic_result = bitA && bitB; break;
-        case LogicMode::OR:  logic_result = bitA || bitB; break;
-        case LogicMode::XOR: logic_result = bitA != bitB; break;
+          case LogicOp::AND: logic_result = bitA && bitB; break;
+          case LogicOp::OR:  logic_result = bitA || bitB; break;
+          case LogicOp::XOR: logic_result = bitA != bitB; break;
       }
 
       float logic_out = 0.f;
       switch (logic_pulse_mode) {
-        case 0:
+          case PulseMode::TRIGGER:
           if (logic_result && new_clock) {
             bit_pulses[15 - i].trigger(0.01f);
           }
           logic_out = bit_pulses[15 - i].process(args.sampleTime) ? 10.f : 0.f;
           break;
-        case 1:
+          case PulseMode::CLOCK:
         default:
           logic_out = logic_result ? clock_input : 0.f;
           break;
-        case 2:
+          case PulseMode::HOLD:
           logic_out = logic_result ? 10.f : 0.f;
           break;
       }
       outputs[GRID_LOGIC_OUTPUT + i].setVoltage(logic_out);
       lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_out);
+      }
+
+      if (dual) {
+        int top_target = rtl ? 8 : 15;
+        int bottom_target = rtl ? 0 : 7;
+        lights[POSITION_LIGHT + i].setBrightness(i == top_target || i == bottom_target ? 1.f : 0.f);
+      }
+      else {
+        int target = rtl ? 0 : 15;
+        lights[POSITION_LIGHT + i].setBrightness(i == target ? 1.f : 0.f);
+      }
     }
   }
 };
@@ -838,34 +851,50 @@ struct TapeMachineModuleWidget : ModuleWidget
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 6));
     addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 7));
 
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(97.761, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::BIT_LIGHT + 14));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::BIT_LIGHT + 13));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(49.576, 82.807)), module, TapeMachineModule::BIT_LIGHT + 12));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(61.622, 82.807)), module, TapeMachineModule::BIT_LIGHT + 11));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669, 82.807)), module, TapeMachineModule::BIT_LIGHT + 10));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 82.807)), module, TapeMachineModule::BIT_LIGHT + 9));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(97.762, 82.807)), module, TapeMachineModule::BIT_LIGHT + 8));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 94.198)), module, TapeMachineModule::BIT_LIGHT + 7));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.483, 94.198)), module, TapeMachineModule::BIT_LIGHT + 6));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(37.529, 94.198)), module, TapeMachineModule::BIT_LIGHT + 5));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(49.576, 94.198)), module, TapeMachineModule::BIT_LIGHT + 4));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(61.622, 94.198)), module, TapeMachineModule::BIT_LIGHT + 3));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669, 94.198)), module, TapeMachineModule::BIT_LIGHT + 2));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 94.198)), module, TapeMachineModule::BIT_LIGHT + 1));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(97.762, 94.198)), module, TapeMachineModule::BIT_LIGHT + 0));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(13.436, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 0));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(25.483, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 1));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(37.529, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 2));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(49.576, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 3));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(61.622, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 4));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(73.669, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 5));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(85.715, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 6));
-    addChild(createLightCentered<MediumSimpleLight<RedLight>>(mm2px(Vec(97.762, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 7));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.761, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::BIT_LIGHT + 14));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::BIT_LIGHT + 13));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 82.807)), module, TapeMachineModule::BIT_LIGHT + 12));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 82.807)), module, TapeMachineModule::BIT_LIGHT + 11));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 82.807)), module, TapeMachineModule::BIT_LIGHT + 10));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 82.807)), module, TapeMachineModule::BIT_LIGHT + 9));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 82.807)), module, TapeMachineModule::BIT_LIGHT + 8));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 94.198)), module, TapeMachineModule::BIT_LIGHT + 7));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 94.198)), module, TapeMachineModule::BIT_LIGHT + 6));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 94.198)), module, TapeMachineModule::BIT_LIGHT + 5));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 94.198)), module, TapeMachineModule::BIT_LIGHT + 4));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 94.198)), module, TapeMachineModule::BIT_LIGHT + 3));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 94.198)), module, TapeMachineModule::BIT_LIGHT + 2));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 94.198)), module, TapeMachineModule::BIT_LIGHT + 1));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 94.198)), module, TapeMachineModule::BIT_LIGHT + 0));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(13.436+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 15));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(25.483+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 14));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(37.529+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 13));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(49.576+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 12));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(61.622+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 11));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(73.669+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 10));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(85.715+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 9));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(97.762+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 8));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(13.436+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 7));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(25.483+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 6));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(37.529+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 5));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(49.576+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 4));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(61.622+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 3));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(73.669+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 2));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(85.715+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 1));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(97.762+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 0));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 0));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 1));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 2));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 3));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 4));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 5));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 6));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 7));
   }
 
   void appendContextMenu(Menu* menu) override {
