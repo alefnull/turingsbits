@@ -53,6 +53,13 @@ struct TapeMachineModule : Module
     ENUMS(POSITION_LIGHT, 16),
     NUM_LIGHTS
   };
+  enum MainMode
+  {
+    SHIFT,
+    STROLL,
+    CASCADE,
+    RANDOM
+  };
   enum PulseMode
   {
     TRIGGER,
@@ -110,10 +117,14 @@ struct TapeMachineModule : Module
   dsp::PulseGenerator random_pulse_a;
   dsp::PulseGenerator random_pulse_b;
 
+  int walker = 15;
+  int walker_a = 15;
+  int walker_b = 7;
+  size_t main_mode = MainMode::SHIFT;
   size_t bit_pulse_mode = PulseMode::CLOCK;
   size_t random_pulse_mode = PulseMode::CLOCK;
   size_t logic_pulse_mode = PulseMode::CLOCK;
-  std::vector<std::string> main_mode_labels = { "Shift", "Stroll", "Cascade", "Flicker" };
+  std::vector<std::string> main_mode_labels = { "Shift", "Stroll", "Cascade", "Random" };
   std::vector<std::string> pulse_mode_labels = { "Trigger", "Clock", "Hold" };
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
@@ -250,6 +261,9 @@ struct TapeMachineModule : Module
     json_object_set_new(rootJ, "noise_a", json_real(noise_a));
     json_object_set_new(rootJ, "noise_b", json_real(noise_b));
     json_object_set_new(rootJ, "shift_amt", json_integer(shift_amt));
+    json_object_set_new(rootJ, "walker", json_integer(walker));
+    json_object_set_new(rootJ, "walker_a", json_integer(walker_a));
+    json_object_set_new(rootJ, "walker_b", json_integer(walker_b));
     for (int i = 0; i < 8; i++) {
       std::string logicModeXJ = "grid_logic_mode_" + std::to_string(i);
       json_object_set_new(rootJ, logicModeXJ.c_str(), json_integer(static_cast<int>(params[Params::GRID_LOGIC_PARAM + i].getValue())));
@@ -344,6 +358,18 @@ struct TapeMachineModule : Module
       if (shift_amt < 1) shift_amt = 1;
       if (shift_amt > 15) shift_amt = 15;
     }
+    json_t* walkerJ = json_object_get(rootJ, "walker");
+    if (walkerJ) {
+      walker = json_integer_value(walkerJ);
+    }
+    json_t* walkerAJ = json_object_get(rootJ, "walker_a");
+    if (walkerAJ) {
+      walker_a = json_integer_value(walkerAJ);
+    }
+    json_t* walkerBJ = json_object_get(rootJ, "walker_b");
+    if (walkerBJ) {
+      walker_b = json_integer_value(walkerBJ);
+    }
     for (int i = 0; i < 8; i++) {
       std::string logicModeX = "grid_logic_mode_" + std::to_string(i);
       json_t* logicModeJ = json_object_get(rootJ, logicModeX.c_str());
@@ -354,6 +380,14 @@ struct TapeMachineModule : Module
         }
       }
     }
+  }
+
+  size_t getMainMode() {
+    return main_mode;
+  }
+
+  void setMainMode(size_t mode) {
+    main_mode = mode;
   }
 
   size_t getBitMode() {
@@ -478,39 +512,223 @@ struct TapeMachineModule : Module
   }
 
   void shiftTape8(uint8_t& tape, int shift_amt, bool rtl) {
-      tape = rtl ? rotl(tape, shift_amt) : rotr(tape, shift_amt);
+    tape = rtl ? rotl(tape, shift_amt) : rotr(tape, shift_amt);
   }
 
   void shiftTape16(uint16_t& tape, int shift_amt, bool rtl) {
-      tape = rtl ? rotl(tape, shift_amt) : rotr(tape, shift_amt);
+    tape = rtl ? rotl(tape, shift_amt) : rotr(tape, shift_amt);
+  }
+
+  void toggleBit8(uint8_t& tape, uint8_t bit) {
+    tape ^= (1 << bit);
+  }
+
+  void toggleBit16(uint16_t& tape, uint8_t bit) {
+    tape ^= (1 << bit);
   }
 
   void toggleEdgeBit8(uint8_t& tape, bool rtl) {
-      tape ^= rtl ? 0x01 : 0x80;
+    tape ^= rtl ? 0x01 : 0x80;
   }
 
   void toggleEdgeBit16(uint16_t& tape, bool rtl, uint16_t* mask) {
-      tape ^= mask[rtl ? 0 : 15];
+    tape ^= mask[rtl ? 0 : 15];
+  }
+
+  void clearBit8(uint8_t& tape, uint8_t bit) {
+    tape &= ~(1 << bit);
+  }
+
+  void clearBit16(uint16_t& tape, uint8_t bit) {
+    tape &= ~(1 << bit);
   }
 
   void clearEdgeBits8(uint8_t& tape, int shift_amt, bool rtl) {
-      for (int i = 0; i < shift_amt; i++)
-          tape &= ~(rtl ? (1 << i) : (0x80 >> i));
+    for (int i = 0; i < shift_amt; i++)
+      tape &= ~(rtl ? (1 << i) : (0x80 >> i));
+  }
+
+  void setBit8(uint8_t& tape, uint8_t bit) {
+    tape |= (1 << bit);
+  }
+
+  void setBit16(uint16_t& tape, uint8_t bit) {
+    tape |= (1 << bit);
   }
 
   void setEdgeBits8(uint8_t& tape, int shift_amt, bool rtl) {
-      for (int i = 0; i < shift_amt; i++)
-          tape |= (rtl ? (1 << i) : (0x80 >> i));
+    for (int i = 0; i < shift_amt; i++)
+      tape |= (rtl ? (1 << i) : (0x80 >> i));
   }
 
   void clearEdgeBits16(uint16_t& tape, int shift_amt, bool rtl, uint16_t* mask) {
-      for (int i = 0; i < shift_amt; i++)
-          tape &= ~(mask[15 << i]);
+    for (int i = 0; i < shift_amt; i++)
+      tape &= ~(mask[15 << i]);
   }
 
   void setEdgeBits16(uint16_t& tape, int shift_amt, bool rtl, uint16_t* mask) {
-      for (int i = 0; i < shift_amt; i++)
-          tape |= mask[15 << i];
+    for (int i = 0; i < shift_amt; i++)
+      tape |= mask[15 << i];
+  }
+
+  void processShift() {
+    if (dual) {
+      shiftTape8(tapeA, shift_amt, rtl);
+      shiftTape8(tapeB, shift_amt, rtl);
+
+      if (noise_a <= prob) {
+        toggleEdgeBit8(tapeA, rtl);
+        bit_toggled_a = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_a.trigger(0.01f);
+      }
+      else {
+        bit_toggled_a = false;
+      }
+      if (noise_b <= prob) {
+        toggleEdgeBit8(tapeB, rtl);
+        bit_toggled_b = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_b.trigger(0.01f);
+      }
+      else {
+        bit_toggled_b = false;
+      }
+
+      if (clear) {
+        clearEdgeBits8(tapeA, shift_amt, rtl);
+        clearEdgeBits8(tapeB, shift_amt, rtl);
+      }
+      if (set) {
+        setEdgeBits8(tapeA, shift_amt, rtl);
+        setEdgeBits8(tapeB, shift_amt, rtl);
+      }
+
+      updateSingleFromDual();
+    }
+    else {
+      shiftTape16(tape, shift_amt, rtl);
+
+      if (noise_a <= prob) {
+        toggleEdgeBit16(tape, rtl, mask);
+        bit_toggled_a = true;
+        if (random_pulse_mode == PulseMode::TRIGGER) {
+          random_pulse_a.trigger(0.01f);
+        }
+      }
+      else {
+        bit_toggled_a = false;
+      }
+
+      if (clear) {
+        clearEdgeBits16(tape, shift_amt, rtl, mask);
+      }
+
+      if (set) {
+        setEdgeBits16(tape, shift_amt, rtl, mask);
+      }
+
+      updateDualFromSingle();
+    }
+  }
+
+  void processStroll() {
+    if (dual) {
+      shiftTape8(tapeA, shift_amt, rtl);
+      shiftTape8(tapeB, shift_amt, rtl);
+
+      if (random::uniform() < 0.5f) {
+        walker_a = walker_a + 1;
+      }
+      else {
+        walker_a = walker_a - 1;
+      }
+      if (walker_a > 15) {
+        walker_a = 8;
+      }
+      if (walker_a < 8) {
+        walker_a = 15;
+      }
+
+      if (random::uniform() < 0.5f) {
+        walker_b = walker_b + 1;
+      }
+      else {
+        walker_b = walker_b - 1;
+      }
+      if (walker_b > 7) {
+        walker_b = 0;
+      }
+      if (walker_b < 0) {
+        walker_b = 7;
+      }
+
+      if (noise_a <= prob) {
+        toggleBit8(tapeA, walker_a);
+        bit_toggled_a = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_a.trigger(0.01f);
+      }
+      else {
+        bit_toggled_a = false;
+      }
+
+      if (noise_b <= prob) {
+        toggleBit8(tapeB, walker_b);
+        bit_toggled_b = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_b.trigger(0.01f);
+      }
+      else {
+        bit_toggled_b = false;
+      }
+
+      if (clear) {
+        clearBit8(tapeA, walker_a);
+        clearBit8(tapeB, walker_b);
+      }
+      if (set) {
+        setBit8(tapeA, walker_a);
+        setBit8(tapeB, walker_b);
+      }
+
+      updateSingleFromDual();
+    }
+    else {
+      shiftTape16(tape, shift_amt, rtl);
+
+      if (random::uniform() < 0.5f) {
+        walker = walker + 1;
+      }
+      else {
+        walker = walker - 1;
+      }
+      if (walker > 15) {
+        walker = 0;
+      }
+      if (walker < 0) {
+        walker = 15;
+      }
+
+      if (noise_a <= prob) {
+        toggleBit16(tape, walker);
+        bit_toggled_a = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_a.trigger(0.01f);
+      }
+      else {
+        bit_toggled_a = false;
+      }
+
+      if (clear) {
+        clearBit16(tape, walker);
+      }
+      if (set) {
+        setBit16(tape, walker);
+      }
+
+      updateDualFromSingle();
+    }
   }
 
   void process(const ProcessArgs& args) override {
@@ -585,63 +803,19 @@ struct TapeMachineModule : Module
         should_reset_tape_b = false;
       }
 
-      if (dual) {
-        shiftTape8(tapeA, shift_amt, rtl);
-        shiftTape8(tapeB, shift_amt, rtl);
-
-        if (noise_a <= prob) {
-          toggleEdgeBit8(tapeA, rtl);
-          bit_toggled_a = true;
-        }
-        else {
-          bit_toggled_a = false;
-        }
-        if (noise_b <= prob) {
-          toggleEdgeBit8(tapeB, rtl);
-          bit_toggled_b = true;
-        }
-        else {
-          bit_toggled_b = false;
-        }
-        if (bit_toggled_a && random_pulse_mode == 0)
-          random_pulse_a.trigger(0.01f);
-        if (bit_toggled_b && random_pulse_mode == 0)
-          random_pulse_b.trigger(0.01f);
-
-        if (clear) {
-          clearEdgeBits8(tapeA, shift_amt, rtl);
-          clearEdgeBits8(tapeB, shift_amt, rtl);
-        }
-        if (set) {
-          setEdgeBits8(tapeA, shift_amt, rtl);
-          setEdgeBits8(tapeB, shift_amt, rtl);
-        }
-
-        updateSingleFromDual();
-      }
-      else {
-        shiftTape16(tape, shift_amt, rtl);
-
-        if (noise_a <= prob) {
-          toggleEdgeBit16(tape, rtl, mask);
-          bit_toggled_a = true;
-          if (random_pulse_mode == 0) {
-            random_pulse_a.trigger(0.01f);
-          }
-        }
-        else {
-          bit_toggled_a = false;
-        }
-
-        if (clear) {
-          clearEdgeBits16(tape, shift_amt, rtl, mask);
-        }
-
-        if (set) {
-          setEdgeBits16(tape, shift_amt, rtl, mask);
-        }
-
-        updateDualFromSingle();
+      switch (main_mode) {
+        case MainMode::SHIFT:
+          processShift();
+          break;
+        case MainMode::STROLL:
+          processStroll();
+          break;
+        case MainMode::CASCADE:
+          // processCascade();
+          break;
+        case MainMode::RANDOM:
+          // processRandom();
+          break;
       }
     }
 
@@ -731,50 +905,80 @@ struct TapeMachineModule : Module
 
     for (int i = 0; i < 16; i++) {
       if (i < 8) {
-      bool bitA, bitB;
-      if (dual) {
-        bitA = ((tapeA >> (7 - i)) & 0x1) != 0;
-        bitB = ((tapeB >> (7 - i)) & 0x1) != 0;
-      }
-      else {
-        bitA = ((tape >> (15 - i)) & 0x1) != 0;
-        bitB = ((tape >> (7 - i)) & 0x1) != 0;
-      }
+        bool bitA, bitB;
+        if (dual) {
+          bitA = ((tapeA >> (7 - i)) & 0x1) != 0;
+          bitB = ((tapeB >> (7 - i)) & 0x1) != 0;
+        }
+        else {
+          bitA = ((tape >> (15 - i)) & 0x1) != 0;
+          bitB = ((tape >> (7 - i)) & 0x1) != 0;
+        }
 
-      bool logic_result = false;
-      switch (grid_logic_modes[i]) {
+        bool logic_result = false;
+        switch (grid_logic_modes[i]) {
           case LogicOp::AND: logic_result = bitA && bitB; break;
           case LogicOp::OR:  logic_result = bitA || bitB; break;
           case LogicOp::XOR: logic_result = bitA != bitB; break;
-      }
+        }
 
-      float logic_out = 0.f;
-      switch (logic_pulse_mode) {
+        float logic_out = 0.f;
+        switch (logic_pulse_mode) {
           case PulseMode::TRIGGER:
-          if (logic_result && new_clock) {
-            bit_pulses[15 - i].trigger(0.01f);
-          }
-          logic_out = bit_pulses[15 - i].process(args.sampleTime) ? 10.f : 0.f;
-          break;
+            if (logic_result && new_clock) {
+              bit_pulses[15 - i].trigger(0.01f);
+            }
+            logic_out = bit_pulses[15 - i].process(args.sampleTime) ? 10.f : 0.f;
+            break;
           case PulseMode::CLOCK:
-        default:
-          logic_out = logic_result ? clock_input : 0.f;
-          break;
+          default:
+            logic_out = logic_result ? clock_input : 0.f;
+            break;
           case PulseMode::HOLD:
-          logic_out = logic_result ? 10.f : 0.f;
-          break;
-      }
-      outputs[GRID_LOGIC_OUTPUT + i].setVoltage(logic_out);
-      lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_out);
+            logic_out = logic_result ? 10.f : 0.f;
+            break;
+        }
+        outputs[GRID_LOGIC_OUTPUT + i].setVoltage(logic_out);
+        lights[GRID_LOGIC_LIGHT + i].setBrightness(logic_out);
       }
 
       if (dual) {
-        int top_target = rtl ? 8 : 15;
-        int bottom_target = rtl ? 0 : 7;
+        int top_target = 0;
+        int bottom_target = 0;
+        switch (main_mode) {
+          case MainMode::SHIFT:
+            top_target = rtl ? 8 : 15;
+            bottom_target = rtl ? 0 : 7;
+            break;
+          case MainMode::STROLL:
+            top_target = walker_a;
+            bottom_target = walker_b;
+            break;
+          case MainMode::CASCADE:
+            // ??
+            break;
+          case MainMode::RANDOM:
+            // ??
+            break;
+        }
         lights[POSITION_LIGHT + i].setBrightness(i == top_target || i == bottom_target ? 1.f : 0.f);
       }
       else {
-        int target = rtl ? 0 : 15;
+        int target = 0;
+        switch (main_mode) {
+          case MainMode::SHIFT:
+            target = rtl ? 0 : 15;
+            break;
+          case MainMode::STROLL:
+            target = walker;
+            break;
+          case MainMode::CASCADE:
+            // ??
+            break;
+          case MainMode::RANDOM:
+            // ??
+            break;
+        }
         lights[POSITION_LIGHT + i].setBrightness(i == target ? 1.f : 0.f);
       }
     }
@@ -871,22 +1075,22 @@ struct TapeMachineModuleWidget : ModuleWidget
     addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 94.198)), module, TapeMachineModule::BIT_LIGHT + 2));
     addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 94.198)), module, TapeMachineModule::BIT_LIGHT + 1));
     addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 94.198)), module, TapeMachineModule::BIT_LIGHT + 0));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(13.436+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 15));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(25.483+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 14));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(37.529+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 13));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(49.576+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 12));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(61.622+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 11));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(73.669+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 10));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(85.715+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 9));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(97.762+3.5, 82.807-3.5)), module, TapeMachineModule::POSITION_LIGHT + 8));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(13.436+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 7));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(25.483+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 6));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(37.529+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 5));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(49.576+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 4));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(61.622+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 3));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(73.669+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 2));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(85.715+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 1));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(97.762+3.5, 94.198-3.5)), module, TapeMachineModule::POSITION_LIGHT + 0));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(16.936, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 15));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(29.083, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 14));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(41.13, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 13));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(53.177, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 12));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(65.224, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 11));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(77.271, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 10));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(89.318, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 9));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(101.365, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 8));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(16.936, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 7));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(29.083, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 6));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(41.13, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 5));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(53.177, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 4));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(65.224, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 3));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(77.271, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 2));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(89.318, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 1));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(101.365, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 0));
     addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 0));
     addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 1));
     addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 2));
@@ -901,6 +1105,8 @@ struct TapeMachineModuleWidget : ModuleWidget
     TapeMachineModule* module = dynamic_cast<TapeMachineModule*>(this->module);
     assert(module);
 
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createIndexSubmenuItem("Main mode", module->main_mode_labels, [=] { return module->getMainMode(); }, [=](size_t mode) { module->setMainMode(mode); }));
     menu->addChild(new MenuSeparator());
     menu->addChild(createIndexSubmenuItem("Bit pulse mode", module->pulse_mode_labels, [=] { return module->getBitMode(); }, [=](size_t mode) { module->setBitMode(mode); }));
     menu->addChild(createIndexSubmenuItem("Random pulse mode", module->pulse_mode_labels, [=] { return module->getRandomMode(); }, [=](size_t mode) { module->setRandomMode(mode); }));
