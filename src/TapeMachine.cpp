@@ -57,7 +57,6 @@ struct TapeMachineModule : Module
   {
     SHIFT,
     STROLL,
-    CASCADE,
     RANDOM
   };
   enum PulseMode
@@ -120,11 +119,14 @@ struct TapeMachineModule : Module
   int walker = 15;
   int walker_a = 15;
   int walker_b = 7;
+  int rand_bit = 15;
+  int rand_bit_a = 15;
+  int rand_bit_b = 7;
   size_t main_mode = MainMode::SHIFT;
   size_t bit_pulse_mode = PulseMode::CLOCK;
   size_t random_pulse_mode = PulseMode::CLOCK;
   size_t logic_pulse_mode = PulseMode::CLOCK;
-  std::vector<std::string> main_mode_labels = { "Shift", "Stroll", "Cascade", "Random" };
+  std::vector<std::string> main_mode_labels = { "Shift", "Stroll", "Random" };
   std::vector<std::string> pulse_mode_labels = { "Trigger", "Clock", "Hold" };
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
@@ -240,6 +242,7 @@ struct TapeMachineModule : Module
 
   json_t* dataToJson() override {
     json_t* rootJ = json_object();
+    json_object_set_new(rootJ, "main_mode", json_integer(main_mode));
     json_object_set_new(rootJ, "bit_pulse_mode", json_integer(bit_pulse_mode));
     json_object_set_new(rootJ, "random_pulse_mode", json_integer(random_pulse_mode));
     json_object_set_new(rootJ, "logic pulse mode", json_integer(logic_pulse_mode));
@@ -272,6 +275,10 @@ struct TapeMachineModule : Module
   }
 
   void dataFromJson(json_t* rootJ) override {
+    json_t* mainModeJ = json_object_get(rootJ, "main_mode");
+    if (mainModeJ) {
+      main_mode = json_integer_value(mainModeJ);
+    }
     json_t* bitModeJ = json_object_get(rootJ, "bit_pulse_mode");
     if (bitModeJ) {
       bit_pulse_mode = json_integer_value(bitModeJ);
@@ -637,31 +644,8 @@ struct TapeMachineModule : Module
       shiftTape8(tapeA, shift_amt, rtl);
       shiftTape8(tapeB, shift_amt, rtl);
 
-      if (random::uniform() < 0.5f) {
-        walker_a = walker_a + 1;
-      }
-      else {
-        walker_a = walker_a - 1;
-      }
-      if (walker_a > 15) {
-        walker_a = 8;
-      }
-      if (walker_a < 8) {
-        walker_a = 15;
-      }
-
-      if (random::uniform() < 0.5f) {
-        walker_b = walker_b + 1;
-      }
-      else {
-        walker_b = walker_b - 1;
-      }
-      if (walker_b > 7) {
-        walker_b = 0;
-      }
-      if (walker_b < 0) {
-        walker_b = 7;
-      }
+      walker_a = (walker_a + (random::uniform() < 0.5f ? 1 : -1)) & 15;
+      walker_b = (walker_b + (random::uniform() < 0.5f ? 1 : -1)) & 7;
 
       if (noise_a <= prob) {
         toggleBit8(tapeA, walker_a);
@@ -697,18 +681,7 @@ struct TapeMachineModule : Module
     else {
       shiftTape16(tape, shift_amt, rtl);
 
-      if (random::uniform() < 0.5f) {
-        walker = walker + 1;
-      }
-      else {
-        walker = walker - 1;
-      }
-      if (walker > 15) {
-        walker = 0;
-      }
-      if (walker < 0) {
-        walker = 15;
-      }
+      walker = (walker + (random::uniform() < 0.5f ? 1 : -1)) & 15;
 
       if (noise_a <= prob) {
         toggleBit16(tape, walker);
@@ -725,6 +698,87 @@ struct TapeMachineModule : Module
       }
       if (set) {
         setBit16(tape, walker);
+      }
+
+      updateDualFromSingle();
+    }
+  }
+
+  void processRandom() {
+    if (dual) {
+      shiftTape8(tapeA, shift_amt, rtl);
+      shiftTape8(tapeB, shift_amt, rtl);
+
+      rand_bit_a = random::u32() % 8 + 8;
+      if (rand_bit_a > 15) {
+        rand_bit_a = 15;
+      }
+      if (rand_bit_a < 8) {
+        rand_bit_a = 8;
+      }
+      if (noise_a <= prob) {
+        toggleBit8(tapeA, rand_bit_a);
+        bit_toggled_a = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_a.trigger(0.01f);
+      }
+      else {
+        bit_toggled_a = false;
+      }
+
+      rand_bit_b = random::u32() % 8;
+      if (rand_bit_b > 7) {
+        rand_bit_b = 7;
+      }
+      if (rand_bit_b < 0) {
+        rand_bit_b = 0;
+      }
+      if (noise_b <= prob) {
+        toggleBit8(tapeB, rand_bit_b);
+        bit_toggled_b = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_b.trigger(0.01f);
+      }
+      else {
+        bit_toggled_b = false;
+      }
+
+      if (clear) {
+        clearBit8(tapeA, rand_bit_a);
+        clearBit8(tapeB, rand_bit_b);
+      }
+      if (set) {
+        setBit8(tapeA, rand_bit_a);
+        setBit8(tapeB, rand_bit_b);
+      }
+
+      updateSingleFromDual();
+    }
+    else {
+      shiftTape16(tape, shift_amt, rtl);
+
+      rand_bit = random::u32() % 16;
+      if (rand_bit > 15) {
+        rand_bit = 15;
+      }
+      if (rand_bit < 0) {
+        rand_bit = 0;
+      }
+      if (noise_a <= prob) {
+        toggleBit16(tape, rand_bit);
+        bit_toggled_a = true;
+        if (random_pulse_mode == PulseMode::TRIGGER)
+          random_pulse_a.trigger(0.01f);
+      }
+      else {
+        bit_toggled_a = false;
+      }
+
+      if (clear) {
+        clearBit16(tape, rand_bit);
+      }
+      if (set) {
+        setBit16(tape, rand_bit);
       }
 
       updateDualFromSingle();
@@ -810,11 +864,8 @@ struct TapeMachineModule : Module
         case MainMode::STROLL:
           processStroll();
           break;
-        case MainMode::CASCADE:
-          // processCascade();
-          break;
         case MainMode::RANDOM:
-          // processRandom();
+          processRandom();
           break;
       }
     }
@@ -954,11 +1005,9 @@ struct TapeMachineModule : Module
             top_target = walker_a;
             bottom_target = walker_b;
             break;
-          case MainMode::CASCADE:
-            // ??
-            break;
           case MainMode::RANDOM:
-            // ??
+            top_target = rand_bit_a;
+            bottom_target = rand_bit_b;
             break;
         }
         lights[POSITION_LIGHT + i].setBrightness(i == top_target || i == bottom_target ? 1.f : 0.f);
@@ -972,11 +1021,8 @@ struct TapeMachineModule : Module
           case MainMode::STROLL:
             target = walker;
             break;
-          case MainMode::CASCADE:
-            // ??
-            break;
           case MainMode::RANDOM:
-            // ??
+            target = rand_bit;
             break;
         }
         lights[POSITION_LIGHT + i].setBrightness(i == target ? 1.f : 0.f);
