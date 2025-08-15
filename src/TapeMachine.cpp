@@ -56,7 +56,7 @@ struct TapeMachineModule : Module
   enum MainMode
   {
     SHIFT,
-    STROLL,
+    WALK,
     RANDOM
   };
   enum PulseMode
@@ -126,7 +126,7 @@ struct TapeMachineModule : Module
   size_t bit_pulse_mode = PulseMode::CLOCK;
   size_t random_pulse_mode = PulseMode::CLOCK;
   size_t logic_pulse_mode = PulseMode::CLOCK;
-  std::vector<std::string> main_mode_labels = { "Shift", "Stroll", "Random" };
+  std::vector<std::string> main_mode_labels = { "Shift", "Walk", "Random" };
   std::vector<std::string> pulse_mode_labels = { "Trigger", "Clock", "Hold" };
   std::vector<dsp::PulseGenerator> bit_pulses;
   std::vector<dsp::PulseGenerator> light_pulses;
@@ -639,7 +639,7 @@ struct TapeMachineModule : Module
     }
   }
 
-  void processStroll() {
+  void processWalk() {
     if (dual) {
       shiftTape8(tapeA, shift_amt, rtl);
       shiftTape8(tapeB, shift_amt, rtl);
@@ -873,8 +873,8 @@ struct TapeMachineModule : Module
         case MainMode::SHIFT:
           processShift();
           break;
-        case MainMode::STROLL:
-          processStroll();
+        case MainMode::WALK:
+          processWalk();
           break;
         case MainMode::RANDOM:
           processRandom();
@@ -1013,7 +1013,7 @@ struct TapeMachineModule : Module
             top_target = rtl ? 8 : 15;
             bottom_target = rtl ? 0 : 7;
             break;
-          case MainMode::STROLL:
+          case MainMode::WALK:
             top_target = walker_a;
             bottom_target = walker_b;
             break;
@@ -1030,7 +1030,7 @@ struct TapeMachineModule : Module
           case MainMode::SHIFT:
             target = rtl ? 0 : 15;
             break;
-          case MainMode::STROLL:
+          case MainMode::WALK:
             target = walker;
             break;
           case MainMode::RANDOM:
