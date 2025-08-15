@@ -644,8 +644,20 @@ struct TapeMachineModule : Module
       shiftTape8(tapeA, shift_amt, rtl);
       shiftTape8(tapeB, shift_amt, rtl);
 
-      walker_a = (walker_a + (random::uniform() < 0.5f ? 1 : -1)) & 15;
-      walker_b = (walker_b + (random::uniform() < 0.5f ? 1 : -1)) & 7;
+      walker_a = (walker_a + (random::uniform() < 0.5f ? 1 : -1));
+      if (walker_a > 15) {
+        walker_a = 8;
+      }
+      if (walker_a < 8) {
+        walker_a = 15;
+      }
+      walker_b = (walker_b + (random::uniform() < 0.5f ? 1 : -1));
+      if (walker_b > 7) {
+        walker_b = 0;
+      }
+      if (walker_b < 0) {
+        walker_b = 7;
+      }
 
       if (noise_a <= prob) {
         toggleBit8(tapeA, walker_a);
