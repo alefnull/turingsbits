@@ -2,7 +2,7 @@
 #include <bit>
 #include "inc/cvRange.hpp"
 
-struct TapeMachineModule : Module
+struct NalaModule : Module
 {
   enum Params
   {
@@ -72,8 +72,8 @@ struct TapeMachineModule : Module
     XOR
   };
 
-  uint16_t tape = 0b0;
-  uint8_t tapeA = 0, tapeB = 0;
+  uint16_t tape_full = 0b0;
+  uint8_t tape_a = 0, tape_b = 0;
   bool dual = false;
   bool last_dual = false;
 
@@ -141,7 +141,7 @@ struct TapeMachineModule : Module
   int shift_amt = 1;
   bool rtl = false;
 
-  TapeMachineModule() {
+  NalaModule() {
     config(Params::NUM_PARAMS, Inputs::NUM_INPUTS, Outputs::NUM_OUTPUTS, Lights::NUM_LIGHTS);
     configParam(Params::PROBABILITY_PARAM, 0, 1, 0.5, "Probability", "%", 0, 100);
     getParamQuantity(Params::PROBABILITY_PARAM)->description = "Probability of a bit being toggled on each clock pulse.";
@@ -200,9 +200,9 @@ struct TapeMachineModule : Module
   }
 
   void onReset() override {
-    tape = 0;
-    tapeA = 0;
-    tapeB = 0;
+    tape_full = 0;
+    tape_a = 0;
+    tape_b = 0;
     last_dual = dual;
 
     voltage_range.cv_a = -1;
@@ -253,9 +253,9 @@ struct TapeMachineModule : Module
     json_object_set_new(rootJ, "min_voltage_range", min_voltage_range.dataToJson());
     json_object_set_new(rootJ, "max_voltage_range", max_voltage_range.dataToJson());
     json_object_set_new(rootJ, "dual_mode", json_boolean(dual));
-    json_object_set_new(rootJ, "tape", json_integer(tape));
-    json_object_set_new(rootJ, "tapeA", json_integer(tapeA));
-    json_object_set_new(rootJ, "tapeB", json_integer(tapeB));
+    json_object_set_new(rootJ, "tape_full", json_integer(tape_full));
+    json_object_set_new(rootJ, "tape_a", json_integer(tape_a));
+    json_object_set_new(rootJ, "tape_b", json_integer(tape_b));
     json_object_set_new(rootJ, "rtl", json_boolean(rtl));
     json_object_set_new(rootJ, "last_dual", json_boolean(last_dual));
     json_object_set_new(rootJ, "bit_toggled_a", json_boolean(bit_toggled_a));
@@ -319,17 +319,17 @@ struct TapeMachineModule : Module
     if (dualModeJ) {
       dual = json_is_true(dualModeJ);
     }
-    json_t* tapeJ = json_object_get(rootJ, "tape");
+    json_t* tapeJ = json_object_get(rootJ, "tape_full");
     if (tapeJ) {
-      tape = json_integer_value(tapeJ);
+      tape_full = json_integer_value(tapeJ);
     }
-    json_t* tapeAJ = json_object_get(rootJ, "tapeA");
+    json_t* tapeAJ = json_object_get(rootJ, "tape_a");
     if (tapeAJ) {
-      tapeA = json_integer_value(tapeAJ);
+      tape_a = json_integer_value(tapeAJ);
     }
-    json_t* tapeBJ = json_object_get(rootJ, "tapeB");
+    json_t* tapeBJ = json_object_get(rootJ, "tape_b");
     if (tapeBJ) {
-      tapeB = json_integer_value(tapeBJ);
+      tape_b = json_integer_value(tapeBJ);
     }
     json_t* rtlJ = json_object_get(rootJ, "rtl");
     if (rtlJ) {
@@ -434,15 +434,15 @@ struct TapeMachineModule : Module
   }
 
   void updateDualFromSingle() {
-    tapeA = (tape >> 8) & 0xFF;
-    tapeB = tape & 0xFF;
+    tape_a = (tape_full >> 8) & 0xFF;
+    tape_b = tape_full & 0xFF;
   }
   void updateSingleFromDual() {
-    tape = ((uint16_t)tapeA << 8) | tapeB;
+    tape_full = ((uint16_t)tape_a << 8) | tape_b;
   }
 
   void resetTape() {
-    tape = 0;
+    tape_full = 0;
     last_dual = dual;
     for (int i = 0; i < 16; i++) {
       bit_pulses[i].reset();
@@ -452,7 +452,7 @@ struct TapeMachineModule : Module
   }
 
   void resetTapeA() {
-    tapeA = 0;
+    tape_a = 0;
     last_dual = dual;
     for (int i = 0; i < 8; i++) {
       bit_pulses[i].reset();
@@ -462,7 +462,7 @@ struct TapeMachineModule : Module
   }
 
   void resetTapeB() {
-    tapeB = 0;
+    tape_b = 0;
     last_dual = dual;
     for (int i = 8; i < 16; i++) {
       bit_pulses[i].reset();
@@ -572,11 +572,11 @@ struct TapeMachineModule : Module
 
   void processShift() {
     if (dual) {
-      shiftTape8(tapeA, shift_amt, rtl);
-      shiftTape8(tapeB, shift_amt, rtl);
+      shiftTape8(tape_a, shift_amt, rtl);
+      shiftTape8(tape_b, shift_amt, rtl);
 
       if (noise_a < prob) {
-        toggleEdgeBit8(tapeA, rtl);
+        toggleEdgeBit8(tape_a, rtl);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_a.trigger(0.01f);
@@ -585,7 +585,7 @@ struct TapeMachineModule : Module
         bit_toggled_a = false;
       }
       if (noise_b < prob) {
-        toggleEdgeBit8(tapeB, rtl);
+        toggleEdgeBit8(tape_b, rtl);
         bit_toggled_b = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_b.trigger(0.01f);
@@ -595,21 +595,21 @@ struct TapeMachineModule : Module
       }
 
       if (clear) {
-        clearEdgeBits8(tapeA, shift_amt, rtl);
-        clearEdgeBits8(tapeB, shift_amt, rtl);
+        clearEdgeBits8(tape_a, shift_amt, rtl);
+        clearEdgeBits8(tape_b, shift_amt, rtl);
       }
       if (set) {
-        setEdgeBits8(tapeA, shift_amt, rtl);
-        setEdgeBits8(tapeB, shift_amt, rtl);
+        setEdgeBits8(tape_a, shift_amt, rtl);
+        setEdgeBits8(tape_b, shift_amt, rtl);
       }
 
       updateSingleFromDual();
     }
     else {
-      shiftTape16(tape, shift_amt, rtl);
+      shiftTape16(tape_full, shift_amt, rtl);
 
       if (noise_a < prob) {
-        toggleEdgeBit16(tape, rtl, mask);
+        toggleEdgeBit16(tape_full, rtl, mask);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER) {
           random_pulse_a.trigger(0.01f);
@@ -620,11 +620,11 @@ struct TapeMachineModule : Module
       }
 
       if (clear) {
-        clearEdgeBits16(tape, shift_amt, rtl, mask);
+        clearEdgeBits16(tape_full, shift_amt, rtl, mask);
       }
 
       if (set) {
-        setEdgeBits16(tape, shift_amt, rtl, mask);
+        setEdgeBits16(tape_full, shift_amt, rtl, mask);
       }
 
       updateDualFromSingle();
@@ -633,8 +633,8 @@ struct TapeMachineModule : Module
 
   void processWalk() {
     if (dual) {
-      shiftTape8(tapeA, shift_amt, rtl);
-      shiftTape8(tapeB, shift_amt, rtl);
+      shiftTape8(tape_a, shift_amt, rtl);
+      shiftTape8(tape_b, shift_amt, rtl);
 
       walker_a = (walker_a + (random::uniform() < 0.5f ? 1 : -1));
       if (walker_a > 7) {
@@ -652,7 +652,7 @@ struct TapeMachineModule : Module
       }
 
       if (noise_a < prob) {
-        toggleBit8(tapeA, walker_a);
+        toggleBit8(tape_a, walker_a);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_a.trigger(0.01f);
@@ -662,7 +662,7 @@ struct TapeMachineModule : Module
       }
 
       if (noise_b < prob) {
-        toggleBit8(tapeB, walker_b);
+        toggleBit8(tape_b, walker_b);
         bit_toggled_b = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_b.trigger(0.01f);
@@ -672,23 +672,23 @@ struct TapeMachineModule : Module
       }
 
       if (clear) {
-        clearBit8(tapeA, walker_a);
-        clearBit8(tapeB, walker_b);
+        clearBit8(tape_a, walker_a);
+        clearBit8(tape_b, walker_b);
       }
       if (set) {
-        setBit8(tapeA, walker_a);
-        setBit8(tapeB, walker_b);
+        setBit8(tape_a, walker_a);
+        setBit8(tape_b, walker_b);
       }
 
       updateSingleFromDual();
     }
     else {
-      shiftTape16(tape, shift_amt, rtl);
+      shiftTape16(tape_full, shift_amt, rtl);
 
       walker = (walker + (random::uniform() < 0.5f ? 1 : -1)) & 15;
 
       if (noise_a < prob) {
-        toggleBit16(tape, walker);
+        toggleBit16(tape_full, walker);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_a.trigger(0.01f);
@@ -698,10 +698,10 @@ struct TapeMachineModule : Module
       }
 
       if (clear) {
-        clearBit16(tape, walker);
+        clearBit16(tape_full, walker);
       }
       if (set) {
-        setBit16(tape, walker);
+        setBit16(tape_full, walker);
       }
 
       updateDualFromSingle();
@@ -710,8 +710,8 @@ struct TapeMachineModule : Module
 
   void processRandom() {
     if (dual) {
-      shiftTape8(tapeA, shift_amt, rtl);
-      shiftTape8(tapeB, shift_amt, rtl);
+      shiftTape8(tape_a, shift_amt, rtl);
+      shiftTape8(tape_b, shift_amt, rtl);
 
       rand_bit_a = random::u32() % 8;
       if (rand_bit_a > 7) {
@@ -721,7 +721,7 @@ struct TapeMachineModule : Module
         rand_bit_a = 7;
       }
       if (noise_a < prob) {
-        toggleBit8(tapeA, rand_bit_a);
+        toggleBit8(tape_a, rand_bit_a);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_a.trigger(0.01f);
@@ -738,7 +738,7 @@ struct TapeMachineModule : Module
         rand_bit_b = 7;
       }
       if (noise_b < prob) {
-        toggleBit8(tapeB, rand_bit_b);
+        toggleBit8(tape_b, rand_bit_b);
         bit_toggled_b = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_b.trigger(0.01f);
@@ -748,18 +748,18 @@ struct TapeMachineModule : Module
       }
 
       if (clear) {
-        clearBit8(tapeA, rand_bit_a);
-        clearBit8(tapeB, rand_bit_b);
+        clearBit8(tape_a, rand_bit_a);
+        clearBit8(tape_b, rand_bit_b);
       }
       if (set) {
-        setBit8(tapeA, rand_bit_a);
-        setBit8(tapeB, rand_bit_b);
+        setBit8(tape_a, rand_bit_a);
+        setBit8(tape_b, rand_bit_b);
       }
 
       updateSingleFromDual();
     }
     else {
-      shiftTape16(tape, shift_amt, rtl);
+      shiftTape16(tape_full, shift_amt, rtl);
 
       rand_bit = random::u32() % 16;
       if (rand_bit > 15) {
@@ -769,7 +769,7 @@ struct TapeMachineModule : Module
         rand_bit = 0;
       }
       if (noise_a < prob) {
-        toggleBit16(tape, rand_bit);
+        toggleBit16(tape_full, rand_bit);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
           random_pulse_a.trigger(0.01f);
@@ -779,10 +779,10 @@ struct TapeMachineModule : Module
       }
 
       if (clear) {
-        clearBit16(tape, rand_bit);
+        clearBit16(tape_full, rand_bit);
       }
       if (set) {
-        setBit16(tape, rand_bit);
+        setBit16(tape_full, rand_bit);
       }
 
       updateDualFromSingle();
@@ -887,10 +887,10 @@ struct TapeMachineModule : Module
     lights[CLEAR_LIGHT].setBrightness(clear ? 1.0f : 0.0f);
     lights[SET_LIGHT].setBrightness(set ? 1.0f : 0.0f);
 
-    uint16_t flipped_tape = (~tape);
-    float voltage = voltage_range.map(tape / 65535.f);
-    float tape_a_voltage = tape_a_range.map(tapeA / 255.f);
-    float tape_b_voltage = tape_b_range.map(tapeB / 255.f);
+    uint16_t flipped_tape = (~tape_full);
+    float voltage = voltage_range.map(tape_full / 65535.f);
+    float tape_a_voltage = tape_a_range.map(tape_a / 255.f);
+    float tape_b_voltage = tape_b_range.map(tape_b / 255.f);
     float flipped_voltage = flipped_voltage_range.map(flipped_tape / 65535.f);
 
     outputs[VOLTAGE_OUTPUT].setVoltage(voltage);
@@ -898,9 +898,9 @@ struct TapeMachineModule : Module
     outputs[TAPE_B_OUTPUT].setVoltage(tape_b_voltage);
     outputs[FLIPPED_OUTPUT].setVoltage(flipped_voltage);
 
-    float min_voltage = flipped_tape ^ ((tape ^ flipped_tape) & -(tape < flipped_tape));
+    float min_voltage = flipped_tape ^ ((tape_full ^ flipped_tape) & -(tape_full < flipped_tape));
     min_voltage = min_voltage_range.map(min_voltage / 65535.f);
-    float max_voltage = tape ^ ((tape ^ flipped_tape) & -(tape < flipped_tape));
+    float max_voltage = tape_full ^ ((tape_full ^ flipped_tape) & -(tape_full < flipped_tape));
     max_voltage = max_voltage_range.map(max_voltage / 65535.f);
 
     outputs[MIN_OUTPUT].setVoltage(min_voltage);
@@ -909,7 +909,7 @@ struct TapeMachineModule : Module
     switch (bit_pulse_mode) {
       case PulseMode::TRIGGER:
         for (int i = 0; i < 16; i++) {
-          if (new_clock && ((tape & mask[i]) != 0)) {
+          if (new_clock && ((tape_full & mask[i]) != 0)) {
             bit_pulses[i].trigger(0.01f);
             light_pulses[i].trigger(0.05f);
           }
@@ -918,20 +918,20 @@ struct TapeMachineModule : Module
           float v = bp ? 10.f : 0.f;
           if (std::abs(v) < 1e-4f) v = 0.f;
           outputs[PULSE_OUTPUT + i].setVoltage(bp ? 10.f : 0.f);
-          lights[BIT_LIGHT + i].setBrightness((((tape & mask[i]) != 0) && lp) ? 1.f : 0.f);
+          lights[BIT_LIGHT + i].setBrightness((((tape_full & mask[i]) != 0) && lp) ? 1.f : 0.f);
         }
         break;
       case PulseMode::CLOCK:
       default:
         for (int i = 0; i < 16; i++) {
-          outputs[PULSE_OUTPUT + i].setVoltage((((tape & mask[i]) != 0) && clock_input > 0.5f) ? clock_input : 0.f);
-          lights[BIT_LIGHT + i].setBrightness((((tape & mask[i]) != 0) && clock_input > 0.5f) ? 1.f : 0.f);
+          outputs[PULSE_OUTPUT + i].setVoltage((((tape_full & mask[i]) != 0) && clock_input > 0.5f) ? clock_input : 0.f);
+          lights[BIT_LIGHT + i].setBrightness((((tape_full & mask[i]) != 0) && clock_input > 0.5f) ? 1.f : 0.f);
         }
         break;
       case PulseMode::HOLD:
         for (int i = 0; i < 16; i++) {
-          outputs[PULSE_OUTPUT + i].setVoltage(((tape & mask[i]) != 0) ? 10.f : 0.f);
-          lights[BIT_LIGHT + i].setBrightness(((tape & mask[i]) != 0) ? 1.f : 0.f);
+          outputs[PULSE_OUTPUT + i].setVoltage(((tape_full & mask[i]) != 0) ? 10.f : 0.f);
+          lights[BIT_LIGHT + i].setBrightness(((tape_full & mask[i]) != 0) ? 1.f : 0.f);
         }
         break;
     }
@@ -962,12 +962,12 @@ struct TapeMachineModule : Module
       if (i < 8) {
         bool bitA, bitB;
         if (dual) {
-          bitA = ((tapeA >> (7 - i)) & 0x1) != 0;
-          bitB = ((tapeB >> (7 - i)) & 0x1) != 0;
+          bitA = ((tape_a >> (7 - i)) & 0x1) != 0;
+          bitB = ((tape_b >> (7 - i)) & 0x1) != 0;
         }
         else {
-          bitA = ((tape >> (15 - i)) & 0x1) != 0;
-          bitB = ((tape >> (7 - i)) & 0x1) != 0;
+          bitA = ((tape_full >> (15 - i)) & 0x1) != 0;
+          bitB = ((tape_full >> (7 - i)) & 0x1) != 0;
         }
 
         bool logic_result = false;
@@ -1035,11 +1035,11 @@ struct TapeMachineModule : Module
   }
 };
 
-struct TapeMachineModuleWidget : ModuleWidget
+struct NalaModuleWidget : ModuleWidget
 {
-  TapeMachineModuleWidget(TapeMachineModule* module) {
+  NalaModuleWidget(NalaModule* module) {
     setModule(module);
-    SvgPanel* panel = createPanel(asset::plugin(pluginInstance, "res/tape-machine.svg"), asset::plugin(pluginInstance, "res/tape-machine-dark.svg"));
+    SvgPanel* panel = createPanel(asset::plugin(pluginInstance, "res/nala.svg"), asset::plugin(pluginInstance, "res/nala-dark.svg"));
     setPanel(panel);
 
     addChild(createWidget<ThemedScrew>(Vec(RACK_GRID_WIDTH, 0)));
@@ -1047,112 +1047,112 @@ struct TapeMachineModuleWidget : ModuleWidget
     addChild(createWidget<ThemedScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     addChild(createWidget<ThemedScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-    addParam(createParamCentered<TL1105>(mm2px(Vec(25.625, 25.412)), module, TapeMachineModule::SET_PARAM));
-    addParam(createParamCentered<TL1105>(mm2px(Vec(35.904, 25.412)), module, TapeMachineModule::CLEAR_PARAM));
-    addParam(createParamCentered<BitTrimpot>(mm2px(Vec(80.148, 25.412)), module, TapeMachineModule::SHIFT_PARAM));
-    addParam(createParamCentered<HugeBitKnob>(mm2px(Vec(55.88, 39.432)), module, TapeMachineModule::PROBABILITY_PARAM));
-    addParam(createParamCentered<CKSS>(mm2px(Vec(75.148, 45.858)), module, TapeMachineModule::DIR_PARAM));
-    addParam(createParamCentered<CKSS>(mm2px(Vec(85.148, 45.858)), module, TapeMachineModule::DUAL_PARAM));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(13.436, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 0));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(25.483, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 1));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(37.529, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 2));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(49.576, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 3));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(61.622, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 4));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(73.669, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 5));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(85.715, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 6));
-    addParam(createParamCentered<CKSSThree>(mm2px(Vec(97.762, 105.151)), module, TapeMachineModule::GRID_LOGIC_PARAM + 7));
+    addParam(createParamCentered<TL1105>(mm2px(Vec(25.625, 25.412)), module, NalaModule::SET_PARAM));
+    addParam(createParamCentered<TL1105>(mm2px(Vec(35.904, 25.412)), module, NalaModule::CLEAR_PARAM));
+    addParam(createParamCentered<BitTrimpot>(mm2px(Vec(80.148, 25.412)), module, NalaModule::SHIFT_PARAM));
+    addParam(createParamCentered<HugeBitKnob>(mm2px(Vec(55.88, 39.432)), module, NalaModule::PROBABILITY_PARAM));
+    addParam(createParamCentered<CKSS>(mm2px(Vec(75.148, 45.858)), module, NalaModule::DIR_PARAM));
+    addParam(createParamCentered<CKSS>(mm2px(Vec(85.148, 45.858)), module, NalaModule::DUAL_PARAM));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(13.436, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 0));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(25.483, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 1));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(37.529, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 2));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(49.576, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 3));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(61.622, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 4));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(73.669, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 5));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(85.715, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 6));
+    addParam(createParamCentered<CKSSThree>(mm2px(Vec(97.762, 105.151)), module, NalaModule::GRID_LOGIC_PARAM + 7));
 
-    addInput(createInputCentered<BitPort>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(80.148, 32.838)), module, TapeMachineModule::SHIFT_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(30.7645, 45.858)), module, TapeMachineModule::CLOCK_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(25.625, 54.62)), module, TapeMachineModule::RESET_A_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 54.62)), module, TapeMachineModule::RESET_B_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(75.148, 54.62)), module, TapeMachineModule::DIR_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 54.62)), module, TapeMachineModule::DUAL_INPUT));
-    addInput(createInputCentered<BitPort>(mm2px(Vec(55.88, 59.432)), module, TapeMachineModule::PROB_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(25.625, 32.838)), module, NalaModule::SET_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 32.838)), module, NalaModule::CLEAR_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(80.148, 32.838)), module, NalaModule::SHIFT_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(30.7645, 45.858)), module, NalaModule::CLOCK_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(25.625, 54.62)), module, NalaModule::RESET_A_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(35.904, 54.62)), module, NalaModule::RESET_B_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(75.148, 54.62)), module, NalaModule::DIR_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(85.148, 54.62)), module, NalaModule::DUAL_INPUT));
+    addInput(createInputCentered<BitPort>(mm2px(Vec(55.88, 59.432)), module, NalaModule::PROB_INPUT));
 
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.437, 70.539)), module, TapeMachineModule::VOLTAGE_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, TapeMachineModule::TAPE_A_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, TapeMachineModule::TAPE_B_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.575, 70.539)), module, TapeMachineModule::FLIPPED_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 70.539)), module, TapeMachineModule::MIN_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.668, 70.539)), module, TapeMachineModule::MAX_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.714, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.761, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_OUTPUT));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 15));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 14));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 13));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 12));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 11));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 10));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 9));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 82.807)), module, TapeMachineModule::PULSE_OUTPUT + 8));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 7));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 6));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 5));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 4));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 3));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 2));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 1));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 94.198)), module, TapeMachineModule::PULSE_OUTPUT + 0));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 0));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 1));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 2));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 3));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 4));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 5));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 6));
-    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 116.543)), module, TapeMachineModule::GRID_LOGIC_OUTPUT + 7));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.437, 70.539)), module, NalaModule::VOLTAGE_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 70.539)), module, NalaModule::TAPE_A_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 70.539)), module, NalaModule::TAPE_B_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.575, 70.539)), module, NalaModule::FLIPPED_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 70.539)), module, NalaModule::MIN_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.668, 70.539)), module, NalaModule::MAX_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.714, 70.539)), module, NalaModule::RANDOM_PULSE_A_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.761, 70.539)), module, NalaModule::RANDOM_PULSE_B_OUTPUT));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 82.807)), module, NalaModule::PULSE_OUTPUT + 15));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 82.807)), module, NalaModule::PULSE_OUTPUT + 14));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 82.807)), module, NalaModule::PULSE_OUTPUT + 13));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 82.807)), module, NalaModule::PULSE_OUTPUT + 12));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 82.807)), module, NalaModule::PULSE_OUTPUT + 11));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 82.807)), module, NalaModule::PULSE_OUTPUT + 10));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 82.807)), module, NalaModule::PULSE_OUTPUT + 9));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 82.807)), module, NalaModule::PULSE_OUTPUT + 8));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 94.198)), module, NalaModule::PULSE_OUTPUT + 7));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 94.198)), module, NalaModule::PULSE_OUTPUT + 6));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 94.198)), module, NalaModule::PULSE_OUTPUT + 5));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 94.198)), module, NalaModule::PULSE_OUTPUT + 4));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 94.198)), module, NalaModule::PULSE_OUTPUT + 3));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 94.198)), module, NalaModule::PULSE_OUTPUT + 2));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 94.198)), module, NalaModule::PULSE_OUTPUT + 1));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 94.198)), module, NalaModule::PULSE_OUTPUT + 0));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(13.436, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 0));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(25.483, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 1));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(37.529, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 2));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(49.576, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 3));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(61.622, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 4));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(73.669, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 5));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(85.715, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 6));
+    addOutput(createOutputCentered<BitPort>(mm2px(Vec(97.762, 116.543)), module, NalaModule::GRID_LOGIC_OUTPUT + 7));
 
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.625, 32.838)), module, TapeMachineModule::SET_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(35.904, 32.838)), module, TapeMachineModule::CLEAR_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 70.539)), module, TapeMachineModule::RANDOM_PULSE_A_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.761, 70.539)), module, TapeMachineModule::RANDOM_PULSE_B_LIGHT));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 82.807)), module, TapeMachineModule::BIT_LIGHT + 15));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 82.807)), module, TapeMachineModule::BIT_LIGHT + 14));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 82.807)), module, TapeMachineModule::BIT_LIGHT + 13));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 82.807)), module, TapeMachineModule::BIT_LIGHT + 12));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 82.807)), module, TapeMachineModule::BIT_LIGHT + 11));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 82.807)), module, TapeMachineModule::BIT_LIGHT + 10));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 82.807)), module, TapeMachineModule::BIT_LIGHT + 9));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 82.807)), module, TapeMachineModule::BIT_LIGHT + 8));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 94.198)), module, TapeMachineModule::BIT_LIGHT + 7));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 94.198)), module, TapeMachineModule::BIT_LIGHT + 6));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 94.198)), module, TapeMachineModule::BIT_LIGHT + 5));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 94.198)), module, TapeMachineModule::BIT_LIGHT + 4));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 94.198)), module, TapeMachineModule::BIT_LIGHT + 3));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 94.198)), module, TapeMachineModule::BIT_LIGHT + 2));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 94.198)), module, TapeMachineModule::BIT_LIGHT + 1));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 94.198)), module, TapeMachineModule::BIT_LIGHT + 0));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(16.936, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 15));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(29.083, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 14));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(41.13, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 13));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(53.177, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 12));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(65.224, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 11));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(77.271, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 10));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(89.318, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 9));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(101.365, 79.257)), module, TapeMachineModule::POSITION_LIGHT + 8));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(16.936, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 7));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(29.083, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 6));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(41.13, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 5));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(53.177, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 4));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(65.224, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 3));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(77.271, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 2));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(89.318, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 1));
-    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(101.365, 90.648)), module, TapeMachineModule::POSITION_LIGHT + 0));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 0));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 1));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 2));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 3));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 4));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 5));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 6));
-    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 116.543)), module, TapeMachineModule::GRID_LOGIC_LIGHT + 7));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.625, 32.838)), module, NalaModule::SET_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(35.904, 32.838)), module, NalaModule::CLEAR_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 70.539)), module, NalaModule::RANDOM_PULSE_A_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.761, 70.539)), module, NalaModule::RANDOM_PULSE_B_LIGHT));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 82.807)), module, NalaModule::BIT_LIGHT + 15));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 82.807)), module, NalaModule::BIT_LIGHT + 14));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 82.807)), module, NalaModule::BIT_LIGHT + 13));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 82.807)), module, NalaModule::BIT_LIGHT + 12));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 82.807)), module, NalaModule::BIT_LIGHT + 11));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 82.807)), module, NalaModule::BIT_LIGHT + 10));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 82.807)), module, NalaModule::BIT_LIGHT + 9));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 82.807)), module, NalaModule::BIT_LIGHT + 8));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 94.198)), module, NalaModule::BIT_LIGHT + 7));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 94.198)), module, NalaModule::BIT_LIGHT + 6));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 94.198)), module, NalaModule::BIT_LIGHT + 5));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 94.198)), module, NalaModule::BIT_LIGHT + 4));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 94.198)), module, NalaModule::BIT_LIGHT + 3));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 94.198)), module, NalaModule::BIT_LIGHT + 2));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 94.198)), module, NalaModule::BIT_LIGHT + 1));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 94.198)), module, NalaModule::BIT_LIGHT + 0));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(16.936, 79.257)), module, NalaModule::POSITION_LIGHT + 15));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(29.083, 79.257)), module, NalaModule::POSITION_LIGHT + 14));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(41.13, 79.257)), module, NalaModule::POSITION_LIGHT + 13));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(53.177, 79.257)), module, NalaModule::POSITION_LIGHT + 12));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(65.224, 79.257)), module, NalaModule::POSITION_LIGHT + 11));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(77.271, 79.257)), module, NalaModule::POSITION_LIGHT + 10));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(89.318, 79.257)), module, NalaModule::POSITION_LIGHT + 9));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(101.365, 79.257)), module, NalaModule::POSITION_LIGHT + 8));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(16.936, 90.648)), module, NalaModule::POSITION_LIGHT + 7));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(29.083, 90.648)), module, NalaModule::POSITION_LIGHT + 6));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(41.13, 90.648)), module, NalaModule::POSITION_LIGHT + 5));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(53.177, 90.648)), module, NalaModule::POSITION_LIGHT + 4));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(65.224, 90.648)), module, NalaModule::POSITION_LIGHT + 3));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(77.271, 90.648)), module, NalaModule::POSITION_LIGHT + 2));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(89.318, 90.648)), module, NalaModule::POSITION_LIGHT + 1));
+    addChild(createLightCentered<SmallSimpleLight<RedLight>>(mm2px(Vec(101.365, 90.648)), module, NalaModule::POSITION_LIGHT + 0));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(13.436, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 0));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(25.483, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 1));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(37.529, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 2));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(49.576, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 3));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(61.622, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 4));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(73.669, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 5));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(85.715, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 6));
+    addChild(createLightCentered<MediumSimpleLight<GreenLight>>(mm2px(Vec(97.762, 116.543)), module, NalaModule::GRID_LOGIC_LIGHT + 7));
   }
 
   void appendContextMenu(Menu* menu) override {
-    TapeMachineModule* module = dynamic_cast<TapeMachineModule*>(this->module);
+    NalaModule* module = dynamic_cast<NalaModule*>(this->module);
     assert(module);
 
     menu->addChild(new MenuSeparator());
@@ -1171,4 +1171,4 @@ struct TapeMachineModuleWidget : ModuleWidget
   }
 };
 
-Model* modelTapeMachine = createModel<TapeMachineModule, TapeMachineModuleWidget>("tape-machine");
+Model* modelNala = createModel<NalaModule, NalaModuleWidget>("nala");

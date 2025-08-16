@@ -3,24 +3,23 @@
   "name": "turing's bits",
   "version": "2.0.3",
   "license": "GPL-3.0-or-later",
-  "brand": "alef's bits",
+  "brand": "turing's bits",
   "author": "alefnull",
   "authorEmail": "",
   "authorUrl": "",
   "pluginUrl": "",
   "manualUrl": "",
   "sourceUrl": "",
-  "donateUrl": "",
+  "donateUrl": "https://ko-fi.com/alefnull",
   "changelogUrl": "",
   "minRackVersion": "2.4.0",
   "modules": [
     {
-      "slug": "tape-machine",
-      "name": "tape machine",
+      "slug": "nala",
+      "name": "Nala",
       "description": "a Turing Machine clone with some extra bits",
       "tags": [
         "random",
-        "noise",
         "logic",
         "sequencer"
       ]
