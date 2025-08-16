@@ -117,10 +117,10 @@ struct TapeMachineModule : Module
   dsp::PulseGenerator random_pulse_b;
 
   int walker = 15;
-  int walker_a = 15;
+  int walker_a = 7;
   int walker_b = 7;
   int rand_bit = 15;
-  int rand_bit_a = 15;
+  int rand_bit_a = 7;
   int rand_bit_b = 7;
   size_t main_mode = MainMode::SHIFT;
   size_t bit_pulse_mode = PulseMode::CLOCK;
@@ -447,10 +447,6 @@ struct TapeMachineModule : Module
     for (int i = 0; i < 16; i++) {
       bit_pulses[i].reset();
       light_pulses[i].reset();
-      if (i < 8) {
-        outputs[Outputs::GRID_LOGIC_OUTPUT + i].setVoltage(0.f);
-        lights[Lights::GRID_LOGIC_LIGHT + i].setBrightness(0.f);
-      }
     }
     updateDualFromSingle();
   }
@@ -461,8 +457,6 @@ struct TapeMachineModule : Module
     for (int i = 0; i < 8; i++) {
       bit_pulses[i].reset();
       light_pulses[i].reset();
-      outputs[Outputs::GRID_LOGIC_OUTPUT + i].setVoltage(0.f);
-      lights[Lights::GRID_LOGIC_LIGHT + i].setBrightness(0.f);
     }
     updateSingleFromDual();
   }
@@ -473,8 +467,6 @@ struct TapeMachineModule : Module
     for (int i = 8; i < 16; i++) {
       bit_pulses[i].reset();
       light_pulses[i].reset();
-      outputs[Outputs::GRID_LOGIC_OUTPUT + i].setVoltage(0.f);
-      lights[Lights::GRID_LOGIC_LIGHT + i].setBrightness(0.f);
     }
     updateSingleFromDual();
   }
@@ -583,7 +575,7 @@ struct TapeMachineModule : Module
       shiftTape8(tapeA, shift_amt, rtl);
       shiftTape8(tapeB, shift_amt, rtl);
 
-      if (noise_a <= prob) {
+      if (noise_a < prob) {
         toggleEdgeBit8(tapeA, rtl);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -592,7 +584,7 @@ struct TapeMachineModule : Module
       else {
         bit_toggled_a = false;
       }
-      if (noise_b <= prob) {
+      if (noise_b < prob) {
         toggleEdgeBit8(tapeB, rtl);
         bit_toggled_b = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -616,7 +608,7 @@ struct TapeMachineModule : Module
     else {
       shiftTape16(tape, shift_amt, rtl);
 
-      if (noise_a <= prob) {
+      if (noise_a < prob) {
         toggleEdgeBit16(tape, rtl, mask);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER) {
@@ -645,11 +637,11 @@ struct TapeMachineModule : Module
       shiftTape8(tapeB, shift_amt, rtl);
 
       walker_a = (walker_a + (random::uniform() < 0.5f ? 1 : -1));
-      if (walker_a > 15) {
-        walker_a = 8;
+      if (walker_a > 7) {
+        walker_a = 0; 
       }
-      if (walker_a < 8) {
-        walker_a = 15;
+      if (walker_a < 0) {
+        walker_a = 7;
       }
       walker_b = (walker_b + (random::uniform() < 0.5f ? 1 : -1));
       if (walker_b > 7) {
@@ -659,7 +651,7 @@ struct TapeMachineModule : Module
         walker_b = 7;
       }
 
-      if (noise_a <= prob) {
+      if (noise_a < prob) {
         toggleBit8(tapeA, walker_a);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -669,7 +661,7 @@ struct TapeMachineModule : Module
         bit_toggled_a = false;
       }
 
-      if (noise_b <= prob) {
+      if (noise_b < prob) {
         toggleBit8(tapeB, walker_b);
         bit_toggled_b = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -695,7 +687,7 @@ struct TapeMachineModule : Module
 
       walker = (walker + (random::uniform() < 0.5f ? 1 : -1)) & 15;
 
-      if (noise_a <= prob) {
+      if (noise_a < prob) {
         toggleBit16(tape, walker);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -721,14 +713,14 @@ struct TapeMachineModule : Module
       shiftTape8(tapeA, shift_amt, rtl);
       shiftTape8(tapeB, shift_amt, rtl);
 
-      rand_bit_a = random::u32() % 8 + 8;
-      if (rand_bit_a > 15) {
-        rand_bit_a = 15;
+      rand_bit_a = random::u32() % 8;
+      if (rand_bit_a > 7) {
+        rand_bit_a = 0; 
       }
-      if (rand_bit_a < 8) {
-        rand_bit_a = 8;
+      if (rand_bit_a < 0) {
+        rand_bit_a = 7;
       }
-      if (noise_a <= prob) {
+      if (noise_a < prob) {
         toggleBit8(tapeA, rand_bit_a);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -740,12 +732,12 @@ struct TapeMachineModule : Module
 
       rand_bit_b = random::u32() % 8;
       if (rand_bit_b > 7) {
-        rand_bit_b = 7;
-      }
-      if (rand_bit_b < 0) {
         rand_bit_b = 0;
       }
-      if (noise_b <= prob) {
+      if (rand_bit_b < 0) {
+        rand_bit_b = 7;
+      }
+      if (noise_b < prob) {
         toggleBit8(tapeB, rand_bit_b);
         bit_toggled_b = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -776,7 +768,7 @@ struct TapeMachineModule : Module
       if (rand_bit < 0) {
         rand_bit = 0;
       }
-      if (noise_a <= prob) {
+      if (noise_a < prob) {
         toggleBit16(tape, rand_bit);
         bit_toggled_a = true;
         if (random_pulse_mode == PulseMode::TRIGGER)
@@ -1014,11 +1006,11 @@ struct TapeMachineModule : Module
             bottom_target = rtl ? 0 : 7;
             break;
           case MainMode::WALK:
-            top_target = walker_a;
+            top_target = walker_a + 8;
             bottom_target = walker_b;
             break;
           case MainMode::RANDOM:
-            top_target = rand_bit_a;
+            top_target = rand_bit_a + 8;
             bottom_target = rand_bit_b;
             break;
         }
