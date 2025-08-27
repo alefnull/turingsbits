@@ -1042,11 +1042,6 @@ struct NalaModuleWidget : ModuleWidget
     SvgPanel* panel = createPanel(asset::plugin(pluginInstance, "res/nala.svg"), asset::plugin(pluginInstance, "res/nala-dark.svg"));
     setPanel(panel);
 
-    addChild(createWidget<ThemedScrew>(Vec(RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ThemedScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ThemedScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-    addChild(createWidget<ThemedScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-
     addParam(createParamCentered<TL1105>(mm2px(Vec(25.625, 25.412)), module, NalaModule::SET_PARAM));
     addParam(createParamCentered<TL1105>(mm2px(Vec(35.904, 25.412)), module, NalaModule::CLEAR_PARAM));
     addParam(createParamCentered<BitTrimpot>(mm2px(Vec(80.148, 25.412)), module, NalaModule::SHIFT_PARAM));

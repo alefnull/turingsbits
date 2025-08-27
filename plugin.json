@@ -23,6 +23,26 @@
         "logic",
         "sequencer"
       ]
+    },
+    {
+      "slug": "abra",
+      "name": "abra",
+      "description": "8-bit analog-to-digital converter",
+      "tags": [
+        "sample and hold",
+        "digital",
+        "logic"
+      ]
+    },
+    {
+      "slug": "cadabra",
+      "name": "cadabra",
+      "description": "8-bit digital-to-analog converter",
+      "tags": [
+        "sample and hold",
+        "digital",
+        "logic"
+      ]
     }
   ]
 }

@@ -5,6 +5,8 @@ using namespace ::rack;
 extern Plugin *pluginInstance;
 
 extern Model *modelNala;
+extern Model *modelAbra;
+extern Model *modelCadabra;
 
 struct BitKnob : RoundBlackKnob
 {
